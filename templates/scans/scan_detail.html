@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Scan results — {{ scan.project.name }}</h2>
+    <a href="{% url 'scans:project_detail' scan.project.pk %}" class="btn btn-outline-secondary btn-sm">
+      Back to project
+    </a>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header"><strong>Scan info</strong></div>
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Scan ID</dt>
+        <dd class="col-sm-9"><code>{{ scan.id }}</code></dd>
+
+        <dt class="col-sm-3">Status</dt>
+        <dd class="col-sm-9">
+          {% if scan.status == "SUCCESS" %}
+            <span class="badge bg-success">{{ scan.status }}</span>
+          {% elif scan.status == "FAILED" %}
+            <span class="badge bg-danger">{{ scan.status }}</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">{{ scan.status }}</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-3">Tool</dt>
+        <dd class="col-sm-9">{{ scan.get_tool_display }}</dd>
+
+        <dt class="col-sm-3">Duration</dt>
+        <dd class="col-sm-9">{{ scan.duration_seconds|default:0 }}s</dd>
+
+        <dt class="col-sm-3">Started</dt>
+        <dd class="col-sm-9">{{ scan.started_at }}</dd>
+
+        {% if scan.finished_at %}
+          <dt class="col-sm-3">Finished</dt>
+          <dd class="col-sm-9">{{ scan.finished_at }}</dd>
+        {% endif %}
+
+        {% if scan.error_message %}
+          <dt class="col-sm-3 text-danger">Error</dt>
+          <dd class="col-sm-9 text-danger">{{ scan.error_message }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div class="row mb-4" id="rollup-cards">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>By severity</strong></div>
+        <div class="card-body">
+          <p class="mb-3"><strong>Total findings:</strong> {{ total_findings }}</p>
+          <div>
+            {% for r in severity_rollups %}
+              <a href="{{ r.toggle_url }}"
+                 data-filter-link
+                 class="rollup-row {% if r.is_active %}is-active{% endif %}">
+                <span><span class="badge bg-{{ r.color }} me-2">&nbsp;</span>{{ r.label }}</span>
+                <span class="badge bg-secondary">{{ r.count }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>OWASP distribution</strong></div>
+        <div class="card-body">
+          {% if owasp_rollups %}
+            <div>
+              {% for r in owasp_rollups %}
+                <a href="{{ r.toggle_url }}"
+                   data-filter-link
+                   class="rollup-row {% if r.is_active %}is-active{% endif %}">
+                  <span class="small">{{ r.category }}</span>
+                  <span class="badge bg-secondary">{{ r.count }}</span>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No findings mapped.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="findings">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <strong>Findings</strong>
+      {% if has_active_filter %}
+        <a href="{{ clear_url }}" data-filter-link class="btn btn-sm btn-outline-secondary">
+          Clear filters
+        </a>
+      {% endif %}
+    </div>
+
+    <div class="card-body p-0">
+      {% if findings %}
+        <div class="table-responsive">
+          <table class="table table-striped mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Severity</th>
+                <th>OWASP</th>
+                <th>Message</th>
+                <th>File</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for finding in findings %}
+                <tr>
+                  <td><code>{{ finding.rule_id }}</code></td>
+                  <td>
+                    {% if finding.severity == "HIGH" %}
+                      <span class="badge bg-danger">HIGH</span>
+                    {% elif finding.severity == "MEDIUM" %}
+                      <span class="badge bg-warning text-dark">MEDIUM</span>
+                    {% else %}
+                      <span class="badge bg-info text-dark">LOW</span>
+                    {% endif %}
+                  </td>
+                  <td class="small">{{ finding.owasp_category }}</td>
+                  <td>{{ finding.message }}</td>
+                  <td><code class="small">{{ finding.file_path }}:{{ finding.line_number }}</code></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% elif has_active_filter %}
+        <p class="text-muted p-3 mb-0">No findings match these filters. <a href="{{ clear_url }}" data-filter-link>Clear filters</a>.</p>
+      {% else %}
+        <p class="text-muted p-3 mb-0">No findings detected.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /*
+   * Filter clicks (rollup rows + Clear filters) are intercepted here so
+   * that toggling a filter doesn't reload the page. Without this, the
+   * browser navigates to ?...#findings and scrolls top→bottom even
+   * though we want the user's scroll position to stay put.
+   *
+   * Strategy: prevent default, fetch the same URL, parse the response,
+   * and replace just #rollup-cards and #findings in place. Then update
+   * the URL bar via history.pushState. Browser never repaints, never
+   * scrolls.
+   */
+  (function () {
+    function applyResponse(html) {
+      var doc = new DOMParser().parseFromString(html, "text/html");
+      var newRollups = doc.getElementById("rollup-cards");
+      var newFindings = doc.getElementById("findings");
+      var oldRollups = document.getElementById("rollup-cards");
+      var oldFindings = document.getElementById("findings");
+      if (newRollups && oldRollups) oldRollups.replaceWith(newRollups);
+      if (newFindings && oldFindings) oldFindings.replaceWith(newFindings);
+    }
+
+    document.addEventListener("click", function (e) {
+      // Let modified clicks (open in new tab, etc.) behave normally.
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+      var link = e.target.closest("a[data-filter-link]");
+      if (!link) return;
+
+      e.preventDefault();
+      var url = link.href;
+      fetch(url, { credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(function (html) {
+          applyResponse(html);
+          history.pushState({}, "", url);
+        })
+        .catch(function () {
+          // If anything goes wrong, fall back to a full navigation so
+          // the user still gets the filter applied.
+          window.location.href = url;
+        });
+    });
+
+    // Browser back / forward also re-fetches and swaps so the active
+    // filter state in the URL stays in sync with what the user sees.
+    window.addEventListener("popstate", function () {
+      fetch(window.location.href, { credentials: "same-origin" })
+        .then(function (r) { return r.text(); })
+        .then(applyResponse);
+    });
+  })();
+</script>
+{% endblock %}

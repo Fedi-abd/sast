@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Your Projects</h2>
+        <a href="{% url 'scans:project_create' %}" class="btn btn-primary">Create Project</a>
+    </div>
+
+    {% if projects %}
+    <table class="table table-bordered table-hover">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Source</th>
+                <th>Language</th>
+                <th style="width: 220px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for project in projects %}
+            <tr class="row-clickable" data-href="{% url 'scans:project_detail' project.pk %}">
+                <td>
+                    <a href="{% url 'scans:project_detail' project.pk %}">
+                        {{ project.name }}
+                    </a>
+                </td>
+                <td>
+                    {% if project.source_type == "local" %}
+                        <span class="badge bg-secondary me-1">Local</span>
+                        <code>{{ project.repo_path }}</code>
+                    {% elif project.source_type == "upload" %}
+                        <span class="badge bg-secondary me-1">ZIP</span>
+                        <code>{{ project.source_filename|default:"(archive)" }}</code>
+                    {% elif project.source_type == "git" %}
+                        <span class="badge bg-secondary me-1">Git</span>
+                        <code>{{ project.git_url }}</code>
+                        {% if project.git_branch %}
+                          <span class="text-muted small">@ {{ project.git_branch }}</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted" aria-label="Unknown source">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if project.language %}
+                        {{ project.language }}
+                    {% else %}
+                        <span class="text-muted" aria-label="No language set">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'scans:project_edit' project.pk %}"
+                       class="btn btn-sm btn-warning">Edit</a>
+                    <a href="{% url 'scans:project_delete' project.pk %}"
+                       class="btn btn-sm btn-danger">Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No projects found. Create your first project.</p>
+    {% endif %}
+
+</div>
+
+<script>
+  (function () {
+    document.querySelectorAll('tr.row-clickable[data-href]').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('a, button, form')) return;
+        window.location.href = row.dataset.href;
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+*.egg
+.Python
+
+# Test / coverage / linting caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Virtual environments
+venv/
+linux-venv/
+env/
+.venv/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+local_settings.py
+media/
+staticfiles/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# WSL / Windows interop cruft
+*.Zone.Identifier
+desktop.ini
+Thumbs.db
+
+# OS-level
+*.log
+*.bak
+*.tmp
+*.swp
+*~
+
+# Node — only if frontend tooling lands later
+node_modules/
+.npm/
+.yarn/
+
+# Claude / agent state
+.claude/
+
+# Project-local scratch / private working notes — never push these
+to do.txt
+docs/

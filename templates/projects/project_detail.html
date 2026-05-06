@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>{{ project.name }}</h2>
+    <div>
+      <a href="{% url 'scans:project_list' %}" class="btn btn-outline-secondary btn-sm">All projects</a>
+      <a href="{% url 'scans:project_edit' project.pk %}" class="btn btn-warning btn-sm">Edit</a>
+      <a href="{% url 'scans:project_delete' project.pk %}" class="btn btn-danger btn-sm">Delete</a>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Source type</dt>
+        <dd class="col-sm-9">{{ project.get_source_type_display }}</dd>
+
+        {% if project.source_type == "local" %}
+          <dt class="col-sm-3">Repository path</dt>
+          <dd class="col-sm-9"><code>{{ project.repo_path }}</code></dd>
+        {% elif project.source_type == "upload" %}
+          <dt class="col-sm-3">Archive</dt>
+          <dd class="col-sm-9"><code>{{ project.source_filename|default:"(archive)" }}</code></dd>
+        {% elif project.source_type == "git" %}
+          <dt class="col-sm-3">Git URL</dt>
+          <dd class="col-sm-9"><code>{{ project.git_url }}</code></dd>
+          {% if project.git_branch %}
+            <dt class="col-sm-3">Branch</dt>
+            <dd class="col-sm-9"><code>{{ project.git_branch }}</code></dd>
+          {% endif %}
+        {% endif %}
+
+        <dt class="col-sm-3">Language</dt>
+        <dd class="col-sm-9">
+          {% if project.language %}
+            {{ project.language }}
+          {% else %}
+            <span class="text-muted" aria-label="No language set">—</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-3">Owner</dt>
+        <dd class="col-sm-9">{{ project.owner.username }}</dd>
+
+        <dt class="col-sm-3">Created</dt>
+        <dd class="col-sm-9">{{ project.created_at }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header"><strong>Run a scan</strong></div>
+    <div class="card-body">
+      {% if has_running_scan %}
+        <p class="text-muted mb-0">
+          A scan is already running for this project.
+          Wait for it to finish before starting another.
+        </p>
+      {% else %}
+        <form id="scan-form"
+              action="{% url 'scans:trigger_scan' project.pk %}"
+              method="post"
+              class="d-flex gap-2 align-items-center mb-0">
+          {% csrf_token %}
+          <button type="submit" name="tool" value="semgrep" class="btn btn-success">
+            Run Semgrep
+          </button>
+          <button type="submit" name="tool" value="sonarqube" class="btn btn-info">
+            Run SonarQube
+          </button>
+          <span id="scan-status" class="text-muted small ms-2 d-none">
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Scanning… this can take a minute or two for a large repo.
+          </span>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><strong>Scan history</strong></div>
+    <div class="card-body p-0">
+      {% if scans %}
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Duration</th>
+              <th>Findings</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for scan in scans %}
+              <tr>
+                <td>{{ scan.get_tool_display }}</td>
+                <td>
+                  {% if scan.status == "SUCCESS" %}
+                    <span class="badge bg-success">{{ scan.status }}</span>
+                  {% elif scan.status == "FAILED" %}
+                    <span class="badge bg-danger">{{ scan.status }}</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">{{ scan.status }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ scan.started_at }}</td>
+                <td>
+                  {% if scan.duration_seconds is not None %}
+                    {{ scan.duration_seconds }}s
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ scan.finding_count }}</td>
+                <td>
+                  <a href="{% url 'scans:scan_detail' scan.pk %}" class="btn btn-sm btn-outline-primary">
+                    View
+                  </a>
+                </td>
+              </tr>
+              {% if scan.status == "FAILED" and scan.error_message %}
+                <tr>
+                  <td colspan="6" class="text-danger small">
+                    <strong>Error:</strong> {{ scan.error_message }}
+                  </td>
+                </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="p-3 text-muted">No scans yet. Trigger one above.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    var form = document.getElementById("scan-form");
+    if (!form) return;
+    form.addEventListener("submit", function () {
+      // Disable both Run buttons and reveal the spinner so the user
+      // can see the request is in flight. The page is still blocking
+      // (synchronous scan), but at least it doesn't look frozen.
+      form.querySelectorAll("button").forEach(function (b) {
+        b.disabled = true;
+      });
+      var status = document.getElementById("scan-status");
+      if (status) status.classList.remove("d-none");
+    });
+  })();
+</script>
+{% endblock %}

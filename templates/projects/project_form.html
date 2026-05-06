@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 720px;">
+  <h2 class="mb-4">{{ view.object.pk|yesno:"Edit project,Create project" }}</h2>
+
+  <form id="project-form" method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="mb-3">
+      <label for="{{ form.name.id_for_label }}" class="form-label">Project name</label>
+      {{ form.name }}
+      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="mb-3">
+      <label for="{{ form.language.id_for_label }}" class="form-label">Language <span class="text-muted">(optional)</span></label>
+      {{ form.language }}
+      {% for err in form.language.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    {% if view.object.pk %}
+      {# === Edit mode === source type is locked, only the active block is rendered. #}
+      <div class="mb-4">
+        <label class="form-label d-block">Source type</label>
+        <p class="form-control-plaintext mb-1"><strong>{{ view.object.get_source_type_display }}</strong></p>
+        <small class="text-muted">
+          The source type is fixed once a project exists. Create a new project to use a different source.
+        </small>
+        <input type="hidden" name="{{ form.source_type.html_name }}" value="{{ view.object.source_type }}">
+      </div>
+
+      {% if view.object.source_type == "local" %}
+        <div class="mb-3">
+          <label for="{{ form.repo_path.id_for_label }}" class="form-label">{{ form.repo_path.label }}</label>
+          {{ form.repo_path }}
+          <div class="form-text">Absolute path on the server, e.g. <code>/home/peli/projects/dvpwa</code>.</div>
+          {% for err in form.repo_path.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+
+      {% elif view.object.source_type == "upload" %}
+        <div class="mb-3">
+          <label class="form-label">Source archive</label>
+          <p class="form-control-plaintext mb-1"><code>{{ view.object.source_filename|default:"(archive)" }}</code></p>
+          <small class="text-muted">
+            The archive is fixed once the project exists — to scan a new version, create a new project.
+          </small>
+        </div>
+
+      {% elif view.object.source_type == "git" %}
+        <div class="mb-3">
+          <label for="{{ form.git_url.id_for_label }}" class="form-label">{{ form.git_url.label }}</label>
+          {{ form.git_url }}
+          {% for err in form.git_url.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          <label for="{{ form.git_branch.id_for_label }}" class="form-label mt-3">{{ form.git_branch.label }}</label>
+          {{ form.git_branch }}
+          {% for err in form.git_branch.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+    {% else %}
+      {# === Create mode === full source-type picker with three blocks; JS hides irrelevant ones. #}
+      <div class="mb-4">
+        <label class="form-label d-block">Source type</label>
+        <div class="btn-group" role="group" aria-label="Source type">
+          {% for radio in form.source_type %}
+            <input type="radio"
+                   class="btn-check source-type-radio"
+                   name="{{ form.source_type.html_name }}"
+                   id="{{ radio.id_for_label }}"
+                   value="{{ radio.data.value }}"
+                   {% if radio.data.selected %}checked{% endif %}>
+            <label class="btn btn-outline-primary" for="{{ radio.id_for_label }}">
+              {{ radio.choice_label }}
+            </label>
+          {% endfor %}
+        </div>
+        {% for err in form.source_type.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
+      </div>
+
+      <div data-source-block="local" class="mb-3 source-block">
+        <label for="{{ form.repo_path.id_for_label }}" class="form-label">{{ form.repo_path.label }}</label>
+        {{ form.repo_path }}
+        <div class="form-text">Absolute path on the server, e.g. <code>/home/peli/projects/dvpwa</code>.</div>
+        {% for err in form.repo_path.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      </div>
+
+      <div data-source-block="upload" class="mb-3 source-block">
+        <label for="{{ form.source_archive.id_for_label }}" class="form-label">{{ form.source_archive.label }}</label>
+        {{ form.source_archive }}
+        <div class="form-text">ZIP archive of the source code.</div>
+        {% for err in form.source_archive.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      </div>
+
+      <div data-source-block="git" class="mb-3 source-block">
+        <label for="{{ form.git_url.id_for_label }}" class="form-label">{{ form.git_url.label }}</label>
+        {{ form.git_url }}
+        {% for err in form.git_url.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+        <label for="{{ form.git_branch.id_for_label }}" class="form-label mt-3">{{ form.git_branch.label }}</label>
+        {{ form.git_branch }}
+        {% for err in form.git_branch.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      </div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="{% url 'scans:project_list' %}" class="btn btn-outline-secondary">Cancel</a>
+  </form>
+</div>
+
+{% if not view.object.pk %}
+  {# Drop overlay only on create — edit mode locks source_type, so dropping a file would do nothing useful. #}
+  <div id="dnd-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100"
+       style="background: rgba(13, 110, 253, 0.18); border: 4px dashed var(--bs-primary); z-index: 1050; pointer-events: none;">
+    <div class="position-absolute top-50 start-50 translate-middle text-center p-4 rounded shadow-lg"
+         style="background-color: var(--bs-body-bg); min-width: 320px;">
+      <div class="display-6 fw-bold text-primary">Drop a ZIP archive to upload</div>
+      <div class="text-muted mt-2">Source type will switch to Upload automatically.</div>
+    </div>
+  </div>
+{% endif %}
+
+<script>
+  /* ===== Source-type fieldset visibility (create mode only) ===== */
+  (function () {
+    var radios = document.querySelectorAll(".source-type-radio");
+    if (!radios.length) return;
+    var blocks = document.querySelectorAll(".source-block");
+
+    function refresh() {
+      var checked = document.querySelector(".source-type-radio:checked");
+      var value = checked ? checked.value : "local";
+      blocks.forEach(function (b) {
+        b.style.display = (b.dataset.sourceBlock === value) ? "" : "none";
+      });
+    }
+
+    radios.forEach(function (r) { r.addEventListener("change", refresh); });
+    refresh();
+  })();
+
+  /* ===== Block browser drop-default on BOTH create and edit =====
+     This must run on every project form page. Without it, the browser
+     navigates to / downloads a file dropped anywhere on the page. */
+  (function () {
+    document.addEventListener("dragover", function (e) { e.preventDefault(); });
+    document.addEventListener("drop",     function (e) { e.preventDefault(); });
+  })();
+
+  /* ===== Drag-and-drop ZIP upload (create mode only) =====
+     Source type is locked on edit, so dropping a file there would have
+     nowhere to go. We only render the overlay + grab files in create. */
+  (function () {
+    var overlay = document.getElementById("dnd-overlay");
+    if (!overlay) return; // Edit mode — preventDefault above still runs.
+
+    var fileInput = document.getElementById("{{ form.source_archive.id_for_label }}");
+    var uploadRadio = document.querySelector(".source-type-radio[value='upload']");
+    var counter = 0;
+
+    function isFileDrag(e) {
+      if (!e.dataTransfer) return false;
+      var types = e.dataTransfer.types;
+      if (!types) return false;
+      for (var i = 0; i < types.length; i++) {
+        if (types[i] === "Files") return true;
+      }
+      return false;
+    }
+
+    document.addEventListener("dragover", function (e) {
+      if (isFileDrag(e)) e.dataTransfer.dropEffect = "copy";
+    });
+    document.addEventListener("dragenter", function (e) {
+      if (!isFileDrag(e)) return;
+      counter++;
+      overlay.classList.remove("d-none");
+    });
+    document.addEventListener("dragleave", function (e) {
+      if (!isFileDrag(e)) return;
+      counter--;
+      if (counter <= 0) { counter = 0; overlay.classList.add("d-none"); }
+    });
+    document.addEventListener("drop", function (e) {
+      counter = 0;
+      overlay.classList.add("d-none");
+      if (!isFileDrag(e)) return;
+      var files = e.dataTransfer.files;
+      if (!files || !files.length || !fileInput) return;
+
+      if (uploadRadio) {
+        uploadRadio.checked = true;
+        uploadRadio.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      try { fileInput.files = files; }
+      catch (err) { fileInput.click(); /* old browsers */ }
+    });
+  })();
+
+  /* ===== Unsaved-changes warning =====
+     beforeunload fires on tab close, link click, and refresh. We only
+     warn if the user actually touched the form — and we mute the warning
+     on submit so saving doesn't trigger it. */
+  (function () {
+    var form = document.getElementById("project-form");
+    if (!form) return;
+    var dirty = false;
+    form.addEventListener("input", function () { dirty = true; });
+    form.addEventListener("change", function () { dirty = true; });
+    form.addEventListener("submit", function () { dirty = false; });
+    window.addEventListener("beforeunload", function (e) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
+  })();
+</script>
+{% endblock %}

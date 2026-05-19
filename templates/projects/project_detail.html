@@ -8,7 +8,14 @@
     <div>
       <a href="{% url 'scans:project_list' %}" class="btn btn-outline-secondary btn-sm">All projects</a>
       <a href="{% url 'scans:project_edit' project.pk %}" class="btn btn-warning btn-sm">Edit</a>
-      <a href="{% url 'scans:project_delete' project.pk %}" class="btn btn-danger btn-sm">Delete</a>
+      <button type="button"
+              class="btn btn-danger btn-sm"
+              data-bs-toggle="modal"
+              data-bs-target="#confirm-delete-modal"
+              data-name="{{ project.name }}"
+              data-url="{% url 'scans:project_delete' project.pk %}">
+        Delete
+      </button>
     </div>
   </div>
 
@@ -54,29 +61,31 @@
   <div class="card mb-4">
     <div class="card-header"><strong>Run a scan</strong></div>
     <div class="card-body">
-      {% if has_running_scan %}
-        <p class="text-muted mb-0">
-          A scan is already running for this project.
-          Wait for it to finish before starting another.
-        </p>
-      {% else %}
-        <form id="scan-form"
-              action="{% url 'scans:trigger_scan' project.pk %}"
-              method="post"
-              class="d-flex gap-2 align-items-center mb-0">
-          {% csrf_token %}
-          <button type="submit" name="tool" value="semgrep" class="btn btn-success">
-            Run Semgrep
-          </button>
-          <button type="submit" name="tool" value="sonarqube" class="btn btn-info">
-            Run SonarQube
-          </button>
-          <span id="scan-status" class="text-muted small ms-2 d-none">
-            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-            Scanning… this can take a minute or two for a large repo.
-          </span>
-        </form>
-      {% endif %}
+      <form id="scan-form"
+            action="{% url 'scans:trigger_scan' project.pk %}"
+            method="post"
+            class="d-flex gap-2 align-items-center flex-wrap mb-0">
+        {% csrf_token %}
+        <button type="submit" name="tool" value="semgrep"
+                class="btn btn-success"
+                {% if semgrep_running %}disabled{% endif %}>
+          {% if semgrep_running %}Semgrep already running…{% else %}Run Semgrep{% endif %}
+        </button>
+        <button type="submit" name="tool" value="sonarqube"
+                class="btn btn-info"
+                {% if sonarqube_running %}disabled{% endif %}>
+          {% if sonarqube_running %}SonarQube already running…{% else %}Run SonarQube{% endif %}
+        </button>
+        <button type="submit" name="tool" value="both"
+                class="btn btn-primary"
+                {% if semgrep_running and sonarqube_running %}disabled{% endif %}>
+          Run Both
+        </button>
+        <span id="scan-status" class="text-muted small ms-2 d-none">
+          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+          Scanning… this can take a minute or two for a large repo.
+        </span>
+      </form>
     </div>
   </div>
 
@@ -145,15 +154,31 @@
   (function () {
     var form = document.getElementById("scan-form");
     if (!form) return;
-    form.addEventListener("submit", function () {
-      // Disable both Run buttons and reveal the spinner so the user
-      // can see the request is in flight. The page is still blocking
-      // (synchronous scan), but at least it doesn't look frozen.
-      form.querySelectorAll("button").forEach(function (b) {
-        b.disabled = true;
-      });
+    var submitted = false;
+
+    form.addEventListener("submit", function (e) {
+      // Spam-click guard: once we've claimed the form, bounce any
+      // subsequent submits without re-firing the request.
+      if (submitted) {
+        e.preventDefault();
+        return;
+      }
+      submitted = true;
+
+      // Show the spinner immediately…
       var status = document.getElementById("scan-status");
       if (status) status.classList.remove("d-none");
+
+      // …but defer disabling the buttons until *after* the browser has
+      // serialized the form. Disabling synchronously drops the
+      // submitter button's name/value from the POST body — that bug
+      // had every scan defaulting to `tool=semgrep` no matter which
+      // button you clicked.
+      setTimeout(function () {
+        form.querySelectorAll("button").forEach(function (b) {
+          b.disabled = true;
+        });
+      }, 0);
     });
   })();
 </script>

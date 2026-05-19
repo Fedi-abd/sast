@@ -91,7 +91,50 @@
       SAST Platform — OWASP Top 10 (2017) coverage via Semgrep and SonarQube.
     </footer>
 
+    <div class="modal fade" id="confirm-delete-modal" tabindex="-1"
+         aria-labelledby="confirm-delete-title" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="confirm-delete-title">Delete project</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2">
+              Delete <strong id="confirm-delete-name"></strong>?
+            </p>
+            <p class="text-muted small mb-0">
+              This also removes the project's scan history. Cannot be undone.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary"
+                    data-bs-dismiss="modal">Cancel</button>
+            <form id="confirm-delete-form" method="post" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      (function () {
+        var modal = document.getElementById("confirm-delete-modal");
+        if (!modal) return;
+        modal.addEventListener("show.bs.modal", function (e) {
+          var btn = e.relatedTarget;
+          if (!btn) return;
+          var name = btn.dataset.name || "this project";
+          var url = btn.dataset.url || "";
+          document.getElementById("confirm-delete-name").textContent = name;
+          document.getElementById("confirm-delete-form").setAttribute("action", url);
+        });
+      })();
+    </script>
     <script>
       (function () {
         var btn = document.getElementById("theme-toggle-btn");

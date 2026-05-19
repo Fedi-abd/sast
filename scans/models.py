@@ -49,8 +49,22 @@ class Project(models.Model):
     git_url = models.URLField(max_length=500, blank=True)
     git_branch = models.CharField(max_length=100, blank=True)
 
+    # SonarQube — auto-generated on save() if blank. Format
+    # `<owner_uuid>__<project_uuid>`, which is unique-per-user-per-project
+    # and lets a single SonarQube instance host every user's scans
+    # without collisions. The admin token in settings authenticates all
+    # uploads, so users never see this value.
+    sonar_project_key = models.CharField(max_length=200, blank=True)
+
     class Meta:
         indexes = [models.Index(fields=['created_at'])]
+
+    def save(self, *args, **kwargs):
+        # On first save, derive the Sonar key from owner + project IDs.
+        # Saved permanently so it stays stable across rescans.
+        if not self.sonar_project_key and self.owner_id and self.id:
+            self.sonar_project_key = f"{self.owner_id}__{self.id}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -73,6 +87,51 @@ class Scan(models.Model):
     
     def __str__(self):
         return f"{self.project.name} - {self.tool} - {self.status}"
+
+class SonarSettings(models.Model):
+    """Platform-wide SonarQube config, editable via Django admin.
+
+    Singleton — only one row should ever exist. The admin registration
+    blocks adding a second one, and `get_solo()` lazily creates the
+    first row on demand. When fields are blank, scan code falls back
+    to the corresponding `settings.SONAR_*` value (env-var driven).
+    """
+
+    SINGLETON_PK = 1
+
+    id = models.PositiveIntegerField(primary_key=True, default=SINGLETON_PK, editable=False)
+    host = models.URLField(
+        max_length=200, blank=True,
+        help_text="SonarQube server URL, e.g. http://localhost:9000. "
+                  "Leave blank to use SONAR_HOST from .env.",
+    )
+    token = models.CharField(
+        max_length=200, blank=True,
+        help_text="Admin token from SonarQube (My Account → Security). "
+                  "Leave blank to use SONAR_TOKEN from .env.",
+    )
+    issue_types = models.CharField(
+        max_length=200, blank=True,
+        help_text='Comma-separated. Default: "VULNERABILITY". Use '
+                  '"VULNERABILITY,BUG,CODE_SMELL" to import everything. '
+                  "Leave blank to use SAST_SONAR_ISSUE_TYPES from .env.",
+    )
+
+    class Meta:
+        verbose_name = "Sonar settings"
+        verbose_name_plural = "Sonar settings"
+
+    def __str__(self):
+        host = self.host or "(env default)"
+        token_status = "set" if self.token else "(env)"
+        return f"SonarQube: {host} • token: {token_status}"
+
+    @classmethod
+    def get_solo(cls):
+        """Return the singleton row, creating it if needed."""
+        obj, _ = cls.objects.get_or_create(pk=cls.SINGLETON_PK)
+        return obj
+
 
 class Finding(models.Model):
     SEVERITY_CHOICES = [('HIGH', 'High'), ('MEDIUM', 'Medium'), ('LOW', 'Low')]

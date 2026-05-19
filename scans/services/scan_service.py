@@ -175,9 +175,20 @@ class ScanService:
             adapter = SemgrepAdapter()
             return adapter.run(repo_path, config)
         elif tool == 'sonarqube':
+            from django.conf import settings as dj_settings
+            # Per-scan overrides (admin-edited SonarSettings) come in
+            # via `config`; static infrastructure settings stay in
+            # Django settings.
             adapter = SonarAdapter(
                 sonar_host=config.get('sonar_host', 'http://localhost:9000'),
-                sonar_token=config.get('sonar_token')
+                sonar_token=config.get('sonar_token'),
+                sonar_scanner_path=getattr(dj_settings, 'SONAR_SCANNER_PATH', None),
+                poll_interval=getattr(dj_settings, 'SAST_SONAR_POLL_INTERVAL', 2.0),
+                poll_timeout=getattr(dj_settings, 'SAST_SONAR_POLL_TIMEOUT', 300.0),
+                issue_types=config.get(
+                    'issue_types',
+                    getattr(dj_settings, 'SAST_SONAR_ISSUE_TYPES', 'VULNERABILITY'),
+                ),
             )
             return adapter.run(repo_path, config)
         else:

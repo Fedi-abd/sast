@@ -115,7 +115,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Display timezone. Storage stays UTC (USE_TZ=True); this only affects
+# what templates render. Override in .env, e.g. TIME_ZONE=Europe/Paris.
+TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
 
 USE_I18N = True
 
@@ -158,6 +160,25 @@ SONAR_PROJECT_KEY = os.getenv("SONAR_PROJECT_KEY")
 
 # Semgrep CLI path. None = auto-discover via PATH (shutil.which).
 SEMGREP_PATH = os.getenv("SEMGREP_PATH")
+
+# sonar-scanner CLI path (the uploader, not the SonarQube server). None
+# = auto-discover via PATH.
+SONAR_SCANNER_PATH = os.getenv("SONAR_SCANNER_PATH")
+
+# How long the SonarAdapter polls SonarQube's task queue waiting for a
+# scan upload to finish processing on the server side. 2s interval +
+# 5min total cap covers any realistic project size.
+SAST_SONAR_POLL_INTERVAL = float(os.getenv("SAST_SONAR_POLL_INTERVAL", "2"))
+SAST_SONAR_POLL_TIMEOUT = float(os.getenv("SAST_SONAR_POLL_TIMEOUT", "300"))
+
+# Which Sonar issue types to import. Modern SonarQube's /api/issues/search
+# accepts only CODE_SMELL, BUG, VULNERABILITY (security hotspots moved
+# to a separate /api/hotspots/search endpoint). Default to VULNERABILITY
+# to match this platform's OWASP-Top-10 framing. Set
+# SAST_SONAR_ISSUE_TYPES="" in .env to import everything.
+SAST_SONAR_ISSUE_TYPES = os.getenv(
+    "SAST_SONAR_ISSUE_TYPES", "VULNERABILITY"
+)
 
 LOGGING = {
     "version": 1,

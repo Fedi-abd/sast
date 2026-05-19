@@ -62,7 +62,11 @@ node_modules/
 
 # Claude / agent state
 .claude/
+.agents/
+skills-lock.json
+.playwright/
 
 # Project-local scratch / private working notes — never push these
 to do.txt
 docs/
+CLAUDE.md

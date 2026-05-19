@@ -53,8 +53,14 @@
                 <td>
                     <a href="{% url 'scans:project_edit' project.pk %}"
                        class="btn btn-sm btn-warning">Edit</a>
-                    <a href="{% url 'scans:project_delete' project.pk %}"
-                       class="btn btn-sm btn-danger">Delete</a>
+                    <button type="button"
+                            class="btn btn-sm btn-danger"
+                            data-bs-toggle="modal"
+                            data-bs-target="#confirm-delete-modal"
+                            data-name="{{ project.name }}"
+                            data-url="{% url 'scans:project_delete' project.pk %}">
+                      Delete
+                    </button>
                 </td>
             </tr>
             {% endfor %}

@@ -39,7 +39,13 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
             .annotate(finding_count=Count("findings"))
             .order_by("-started_at")
         )
-        context["has_running_scan"] = project.scans.filter(status="RUNNING").exists()
+        # Per-tool: Semgrep can run while Sonar is in flight, but each
+        # tool's own button should be disabled if that tool is busy.
+        running_tools = set(
+            project.scans.filter(status="RUNNING").values_list("tool", flat=True)
+        )
+        context["semgrep_running"] = "semgrep" in running_tools
+        context["sonarqube_running"] = "sonarqube" in running_tools
         return context
 
 
@@ -47,11 +53,16 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     model = Project
     form_class = ProjectForm
     template_name = "projects/project_form.html"
-    success_url = reverse_lazy("scans:project_list")
 
     def form_valid(self, form):
         form.instance.owner = self.request.user
         return super().form_valid(form)
+
+    def get_success_url(self):
+        # Land on the new project's detail page (the user almost
+        # always wants to start a scan straight away) rather than
+        # bouncing back to the list.
+        return reverse_lazy("scans:project_detail", kwargs={"pk": self.object.pk})
 
 
 class ProjectUpdateView(LoginRequiredMixin, UpdateView):
@@ -186,29 +197,35 @@ def crash(request):
 @login_required
 @require_POST
 def trigger_scan(request, project_id):
-    """Kick off a scan for `project_id` using the tool the user selected.
+    """Kick off one or both scanners for `project_id`.
 
-    Two-step structure to keep the locking transaction short:
-      1. Inside `transaction.atomic()` with `select_for_update()`, lock
-         the Project, refuse if a RUNNING scan exists, otherwise create
-         the new RUNNING row. Commit. Concurrent clicks now see the row.
-      2. Outside the transaction, run the adapter/parser/bulk_create.
-         If that raises (e.g. data too long), the ScanService's own
-         error handler can still persist FAILED — the transaction it
-         used to be inside isn't poisoned because there isn't one.
+    `tool` from the form is one of "semgrep", "sonarqube", or "both".
+    For the single-tool case, lock per-(project, tool), create the
+    RUNNING row, then run the adapter outside the transaction.
+    For "both", do the same once per tool and run the two scanners
+    in parallel via threads — they share no resources (Semgrep is a
+    local subprocess; Sonar uses its own server) so concurrency just
+    works.
     """
     valid_tools = {value for value, _ in Scan.TOOL_CHOICES}
     tool = request.POST.get("tool", "semgrep")
-    if tool not in valid_tools:
+    if tool not in valid_tools and tool != "both":
         return redirect("scans:project_detail", pk=project_id)
 
     project = get_object_or_404(Project, id=project_id, owner=request.user)
     service = ScanService()
 
+    if tool == "both":
+        return _trigger_both(request, project, service)
+
     # Step 1: reserve a scan slot under a short lock.
+    # Per-(project, tool) lock — different tools can run concurrently
+    # on the same project (Semgrep is local, Sonar uses its own server,
+    # no resource conflict), but you can't queue the same tool twice
+    # on the same project.
     with transaction.atomic():
         Project.objects.select_for_update().get(pk=project.pk)
-        if project.scans.filter(status="RUNNING").exists():
+        if project.scans.filter(status="RUNNING", tool=tool).exists():
             return redirect("scans:project_detail", pk=project_id)
         scan = service._create_running_scan(project, tool)
 
@@ -221,18 +238,73 @@ def trigger_scan(request, project_id):
     return redirect("scans:project_detail", pk=project_id)
 
 
+def _trigger_both(request, project, service):
+    """Run Semgrep + SonarQube on the same project in parallel."""
+    import threading
+
+    # Lock and create both RUNNING rows in one short transaction.
+    with transaction.atomic():
+        Project.objects.select_for_update().get(pk=project.pk)
+        running = set(
+            project.scans.filter(status="RUNNING").values_list("tool", flat=True)
+        )
+        scans = []
+        for t in ("semgrep", "sonarqube"):
+            if t in running:
+                # Don't double-up if that tool's already running.
+                continue
+            scans.append(service._create_running_scan(project, t))
+
+    if not scans:
+        return redirect("scans:project_detail", pk=project.pk)
+
+    # Run each scan in its own thread so they progress in parallel.
+    # Django's runserver uses a thread per request anyway, so this
+    # adds two more threads — well within the dev server's capacity.
+    threads = []
+    for scan in scans:
+        config = _build_scan_config(scan.tool, project)
+        t = threading.Thread(
+            target=service.execute, args=(scan,), kwargs={"config": config}
+        )
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+
+    return redirect("scans:project_detail", pk=project.pk)
+
+
 def _build_scan_config(tool, project):
     """Per-tool config dict for ScanService.run_scan.
 
-    Sonar config comes from Django settings; per-project overrides land
-    in Sprint 3 once we add the Sonar fields to the Project model.
+    SonarQube config resolves in this order:
+      1. `SonarSettings` singleton row (editable in /admin/)
+      2. `settings.SONAR_*` from .env / environment variables
+      3. Hardcoded fallback (host only)
+
+    Each Project has a unique `sonar_project_key` (auto-set on first
+    save) that namespaces its findings inside SonarQube, so one shared
+    instance can host every user's data without collisions.
     """
     from django.conf import settings
+    from .models import SonarSettings
 
     if tool == "sonarqube":
+        admin_cfg = SonarSettings.get_solo()
         return {
-            "sonar_host": getattr(settings, "SONAR_HOST", "http://localhost:9000"),
-            "sonar_token": getattr(settings, "SONAR_TOKEN", None),
-            "project_key": getattr(settings, "SONAR_PROJECT_KEY", None) or project.name,
+            "sonar_host": (
+                admin_cfg.host
+                or getattr(settings, "SONAR_HOST", "http://localhost:9000")
+            ),
+            "sonar_token": (
+                admin_cfg.token
+                or getattr(settings, "SONAR_TOKEN", None)
+            ),
+            "project_key": project.sonar_project_key,
+            "issue_types": (
+                admin_cfg.issue_types
+                or getattr(settings, "SAST_SONAR_ISSUE_TYPES", "VULNERABILITY")
+            ),
         }
     return {}

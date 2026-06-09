@@ -78,8 +78,8 @@
         </button>
         <button type="submit" name="tool" value="both"
                 class="btn btn-primary"
-                {% if semgrep_running and sonarqube_running %}disabled{% endif %}>
-          Run Both
+                {% if semgrep_running or sonarqube_running %}disabled{% endif %}>
+          {% if semgrep_running or sonarqube_running %}Run Both unavailable…{% else %}Run Both{% endif %}
         </button>
         <span id="scan-status" class="text-muted small ms-2 d-none">
           <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
@@ -106,7 +106,7 @@
           </thead>
           <tbody>
             {% for scan in scans %}
-              <tr>
+              <tr {% if scan.status == "RUNNING" %}data-poll-scan-id="{{ scan.id }}"{% endif %}>
                 <td>{{ scan.get_tool_display }}</td>
                 <td>
                   {% if scan.status == "SUCCESS" %}
@@ -180,6 +180,31 @@
         });
       }, 0);
     });
+  })();
+
+  (function () {
+    var rows = document.querySelectorAll("tr[data-poll-scan-id]");
+    if (!rows.length) return;
+
+    var pending = new Set();
+    rows.forEach(function (r) { pending.add(r.dataset.pollScanId); });
+
+    var interval = setInterval(function () {
+      var checks = Array.from(pending).map(function (id) {
+        return fetch("/api/scans/" + id + "/", { credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (data && data.status !== "RUNNING") pending.delete(data.id);
+          })
+          .catch(function () { /* network blip, try again next tick */ });
+      });
+      Promise.all(checks).then(function () {
+        if (!pending.size) {
+          clearInterval(interval);
+          window.location.reload();
+        }
+      });
+    }, 3000);
   })();
 </script>
 {% endblock %}

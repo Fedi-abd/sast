@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import sys
 
 load_dotenv()
 
@@ -41,10 +42,44 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'django_q',
     'core',
     'scans',
     'users',
 ]
+
+# django-q2: ORM broker keeps everything in Postgres — no Redis to
+# operate. `retry` must be larger than `timeout` or django-q2 refuses
+# to start. Override Q_CLUSTER["sync"] = True in tests to run tasks
+# inline in the same process.
+Q_CLUSTER = {
+    "name": "sast",
+    "workers": 2,
+    "timeout": 600,
+    "retry": 660,
+    "queue_limit": 50,
+    "bulk": 10,
+    "orm": "default",
+    # Run inline under `manage.py test` so async paths can be asserted
+    # without spinning up a worker process.
+    "sync": "test" in sys.argv,
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -148,8 +183,19 @@ SAST_GIT_CLONE_TIMEOUT = int(os.getenv("SAST_GIT_CLONE_TIMEOUT", "60"))
 
 # Auth
 LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "/projects/"
+# After login, land on the Vue SPA. Until Vue is built, /app/
+# is a placeholder view that redirects to /debug/projects/, so
+# the post-login experience still works end-to-end in dev.
+LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+# Templated UI exposure. The Django templates that pre-date the Vue
+# SPA still work, but they're treated as a debug-only fallback —
+# accessible in dev/tests, hidden in production. Production .env
+# should set `SAST_DEBUG_UI=False`. We can't gate this on Django's
+# DEBUG flag directly because the test runner forces DEBUG=False
+# and would hide the URLs templates use during reverse() calls.
+SAST_DEBUG_UI = os.getenv("SAST_DEBUG_UI", "True") == "True"
 
 # SonarQube profile defaults — read from env so they can be set per
 # deployment without code changes. A per-project override moves into

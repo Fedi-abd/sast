@@ -197,95 +197,74 @@ def crash(request):
 @login_required
 @require_POST
 def trigger_scan(request, project_id):
-    """Kick off one or both scanners for `project_id`.
+    """Enqueue one or both scans for `project_id` and return immediately.
 
     `tool` from the form is one of "semgrep", "sonarqube", or "both".
-    For the single-tool case, lock per-(project, tool), create the
-    RUNNING row, then run the adapter outside the transaction.
-    For "both", do the same once per tool and run the two scanners
-    in parallel via threads — they share no resources (Semgrep is a
-    local subprocess; Sonar uses its own server) so concurrency just
-    works.
+    For each requested tool we:
+
+      1. Open a short DB transaction with `select_for_update()` on the
+         Project row — this serializes concurrent "click Run Scan twice"
+         attempts so the duplicate check below is race-free.
+      2. Skip any tool that already has a RUNNING scan for this project
+         (the per-(project, tool) lock).
+      3. Reserve a RUNNING `Scan` row for the survivors.
+      4. Push `scans.tasks.run_scan` onto the django-q2 queue with the
+         new scan IDs.
+
+    The view then redirects to the project detail page, which has
+    a small polling script that hits `/api/scans/<id>/` every 3s and
+    reloads the page once nothing's still RUNNING. The actual scan
+    work happens in the qcluster worker process — runserver returns
+    in milliseconds.
     """
-    valid_tools = {value for value, _ in Scan.TOOL_CHOICES}
+    from django_q.tasks import async_task
+
+    valid_tools = {value for value, _ in Scan.TOOL_CHOICES} | {"both"}
     tool = request.POST.get("tool", "semgrep")
-    if tool not in valid_tools and tool != "both":
+    if tool not in valid_tools:
         return redirect("scans:project_detail", pk=project_id)
 
     project = get_object_or_404(Project, id=project_id, owner=request.user)
     service = ScanService()
 
-    if tool == "both":
-        return _trigger_both(request, project, service)
+    requested_tools = ("semgrep", "sonarqube") if tool == "both" else (tool,)
 
-    # Step 1: reserve a scan slot under a short lock.
-    # Per-(project, tool) lock — different tools can run concurrently
-    # on the same project (Semgrep is local, Sonar uses its own server,
-    # no resource conflict), but you can't queue the same tool twice
-    # on the same project.
-    with transaction.atomic():
-        Project.objects.select_for_update().get(pk=project.pk)
-        if project.scans.filter(status="RUNNING", tool=tool).exists():
-            return redirect("scans:project_detail", pk=project_id)
-        scan = service._create_running_scan(project, tool)
-
-    # Step 2: execute the scan outside the transaction.
-    config = _build_scan_config(tool, project)
-    result = service.execute(scan, config=config)
-
-    if result.get("success"):
-        return redirect("scans:scan_detail", pk=result["scan_id"])
-    return redirect("scans:project_detail", pk=project_id)
-
-
-def _trigger_both(request, project, service):
-    """Run Semgrep + SonarQube on the same project in parallel."""
-    import threading
-
-    # Lock and create both RUNNING rows in one short transaction.
     with transaction.atomic():
         Project.objects.select_for_update().get(pk=project.pk)
         running = set(
             project.scans.filter(status="RUNNING").values_list("tool", flat=True)
         )
-        scans = []
-        for t in ("semgrep", "sonarqube"):
-            if t in running:
-                # Don't double-up if that tool's already running.
-                continue
-            scans.append(service._create_running_scan(project, t))
+        scans = [
+            service._create_running_scan(project, t)
+            for t in requested_tools
+            if t not in running
+        ]
 
-    if not scans:
-        return redirect("scans:project_detail", pk=project.pk)
-
-    # Run each scan in its own thread so they progress in parallel.
-    # Django's runserver uses a thread per request anyway, so this
-    # adds two more threads — well within the dev server's capacity.
-    threads = []
     for scan in scans:
-        config = _build_scan_config(scan.tool, project)
-        t = threading.Thread(
-            target=service.execute, args=(scan,), kwargs={"config": config}
+        async_task(
+            "scans.tasks.run_scan",
+            str(scan.id),
+            _build_scan_config(scan.tool, project),
         )
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join()
 
     return redirect("scans:project_detail", pk=project.pk)
 
 
 def _build_scan_config(tool, project):
-    """Per-tool config dict for ScanService.run_scan.
+    """Per-tool config dict for `ScanService.execute`.
 
-    SonarQube config resolves in this order:
-      1. `SonarSettings` singleton row (editable in /admin/)
-      2. `settings.SONAR_*` from .env / environment variables
-      3. Hardcoded fallback (host only)
+    Semgrep has no per-scan config — its adapter just needs a path,
+    which the resolver provides. SonarQube needs host + token + the
+    per-project sonar_project_key. The resolution order for the
+    host/token pair is:
+
+      1. `SonarSettings` singleton row (editable in `/admin/`).
+      2. `settings.SONAR_*` from `.env` / environment variables.
+      3. Hardcoded fallback (host only — there is no fallback token).
 
     Each Project has a unique `sonar_project_key` (auto-set on first
     save) that namespaces its findings inside SonarQube, so one shared
-    instance can host every user's data without collisions.
+    Sonar instance can host every user's scans without collisions.
     """
     from django.conf import settings
     from .models import SonarSettings

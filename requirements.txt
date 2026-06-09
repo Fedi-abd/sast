@@ -12,6 +12,9 @@ click-option-group==0.5.9
 colorama==0.4.6
 cryptography==46.0.6
 Django==6.0.3
+djangorestframework==3.17.1
+django-q2==1.10.0
+django-picklefield==3.4.0
 exceptiongroup==1.2.2
 face==26.0.0
 glom==25.12.0

@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Analyst-console layer. Layered on top of Tailwind's preflight.
+ *
+ * Dark mode is the signature look — a deep navy near-black with a
+ * 1px inset highlight on raised surfaces (the "carved out of the
+ * surface" trick Linear and Vercel use). Light mode is the same
+ * identity, lights on: same elevation rules, brighter base, slightly
+ * stronger outer shadows because the inset highlight trick doesn't
+ * read on white.
+ *
+ * Atmosphere: dark mode body carries a faint cyan radial glow at the
+ * top — feels like a workspace rather than a void. Light mode stays
+ * clean.
+ */
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  @apply font-sans antialiased text-slate-900 bg-surface-base;
+  /* Geist's tabular numerals — keep finding counts and durations from
+     dancing as values change during live polling. */
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'tnum';
+  letter-spacing: -0.005em;
+}
+
+.dark body {
+  @apply text-slate-100 bg-surface-dark-base bg-dark-atmosphere;
+  background-attachment: fixed;
+}
+
+/* === Card surfaces ===
+ *
+ * `.card` is the base surface — used for every grouped panel: project
+ * cards, scan rows, rollup tiles, metadata blocks. Dark mode uses a
+ * 1px inset top border (the carved-out look); light mode uses a soft
+ * two-stop shadow.
+ *
+ * `.card-interactive` is the same surface with hover lift — used on
+ * project cards and other clickable card surfaces. Subtle: 2px lift,
+ * shadow expansion, 200ms ease. No transform on the contents (text
+ * stays where the eye expects it).
+ */
+.card {
+  @apply rounded-xl bg-surface-raised dark:bg-surface-dark-raised
+         border border-line dark:border-line-dark
+         shadow-card dark:shadow-none;
+  position: relative;
+}
+
+.dark .card::before {
+  /* 1px inset top highlight — the "carved" edge. Only visible in dark
+     mode because it relies on the body being darker than the card. */
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.06) 20%,
+    rgba(255, 255, 255, 0.06) 80%,
+    transparent
+  );
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.card-interactive {
+  @apply card transition-all duration-200 ease-out;
+}
+
+.card-interactive:hover {
+  @apply -translate-y-0.5 shadow-card-hover dark:bg-surface-dark-elevated
+         dark:border-line-dark-strong;
+}
+
+/* === Buttons ===
+ *
+ * Project-wide button base. Variants picked via utility classes on the
+ * element (primary, ghost, destructive). Centralized here so radii,
+ * padding, transitions stay coherent.
+ */
+.btn {
+  @apply inline-flex items-center justify-center gap-2
+         rounded-lg px-4 py-2 text-sm font-medium
+         transition-colors duration-150;
+}
+
+.btn-primary {
+  @apply btn bg-brand text-white hover:bg-brand-600
+         active:bg-brand-700 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-ghost {
+  @apply btn text-slate-700 dark:text-slate-200
+         hover:bg-slate-100 dark:hover:bg-surface-dark-elevated;
+}
+
+.btn-destructive {
+  @apply btn bg-red-600 text-white hover:bg-red-700;
+}
+
+/* === Inputs ===
+ * Quiet by default, brand focus ring on interaction. */
+.input {
+  @apply w-full rounded-lg border border-line dark:border-line-dark
+         bg-surface-raised dark:bg-surface-dark-elevated
+         px-3 py-2 text-sm
+         placeholder:text-slate-400 dark:placeholder:text-slate-500
+         transition-shadow duration-150;
+}
+
+.input:focus {
+  @apply outline-none border-brand shadow-focus-ring;
+}
+
+/* === Focus ring ===
+ * Tuned to brand color. Tailwind's default ring is indigo-500 which
+ * clashes with the blue palette here. */
+*:focus-visible {
+  @apply outline-none ring-2 ring-brand ring-offset-2
+         ring-offset-surface-base dark:ring-offset-surface-dark-base;
+}
+
+/* === Sidebar nav active state ===
+ * The brand-tinted chip-fill look from the user's design reference. */
+.nav-link {
+  @apply px-3 py-2 rounded-lg text-sm font-medium
+         text-slate-700 dark:text-slate-300
+         hover:bg-slate-100 dark:hover:bg-surface-dark-elevated
+         transition-colors duration-150;
+}
+
+.nav-link.router-link-active {
+  @apply bg-brand-50 text-brand-700
+         dark:bg-brand-900/40 dark:text-brand-200;
+}
+
+/* === Code spans inside content ===
+ * Findings table file paths, rule IDs, Sonar keys — all monospace,
+ * subtly tinted. */
+code {
+  @apply font-mono text-[0.875em] px-1 py-0.5 rounded
+         bg-slate-100 dark:bg-surface-dark-elevated
+         text-slate-700 dark:text-slate-300;
+}

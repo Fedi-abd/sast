@@ -8,7 +8,9 @@ The platform itself does not implement detection rules; it sits above
 the scanners as a reasoning layer, giving you a unified view of findings
 across tools.
 
-**Tech stack:** Django 6, PostgreSQL 16, Bootstrap 5, Semgrep, SonarQube.
+**Tech stack:** Django 6 + Django REST Framework, PostgreSQL 16, a Vue 3
++ Vite single-page app (Django templates stay on as a debug fallback),
+django-q2 for async scans, WeasyPrint for PDF reports, Semgrep, SonarQube.
 
 ---
 
@@ -23,14 +25,20 @@ across tools.
 
 ## Features
 
-- Three project source types: local path, ZIP upload, Git URL
-- Semgrep and SonarQube as scan profiles
+- Vue 3 single-page app as the primary UI, with a Django-templated debug fallback
+- REST API (DRF) behind the SPA
+- Three project source types: local path, ZIP upload (drag-and-drop), Git URL (host allowlist)
+- Semgrep and SonarQube scan profiles, run asynchronously via django-q2
 - Scan history and lifecycle tracking per project
-- OWASP Top 10 (2017) mapping
-- Interactive severity and OWASP filtering on findings
+- OWASP Top 10 (2017) mapping (CWE lookup plus a curated SonarQube rule fallback)
+- SonarQube security hotspots merged in; an admin toggle and a per-scan type menu to show or hide issue types
+- Interactive severity and OWASP filtering; mark findings "solved" to track triage progress
+- PDF report export, scoped by severity
+- Credits and quota system: admin-configurable per-user limits (credits, projects, upload size), with unlimited supported
+- In-app admin console: SonarQube config, per-user limits, usage log, user management, deployment flags
+- Auth: registration, login by username or email, live password strength + requirements, self-service password-reset requests
 - Light and dark mode
-- Built-in user registration (no CLI setup required)
-- Secure upload with drag-and-drop
+- Upload hardening: zip-slip and zip-bomb defenses
 
 ---
 
@@ -72,11 +80,16 @@ Then generate a token in the SonarQube UI and set `SONAR_HOST` and
 
 ## Usage
 
+The primary UI is the Vue SPA at `/app/`. Build it once from `frontend/`
+(`npm install && npm run build`); the Django-templated UI stays available
+at `/debug/` as a fallback, and staff get an in-app admin console at
+`/app/#/admin`.
+
 Visit `http://localhost:8000/`, sign up, then:
 
 1. Create a project: pick a source type (local path, ZIP, or Git URL).
-2. Click **Run Semgrep** or **Run SonarQube** on the project page.
-3. Review findings with severity and OWASP filters.
+2. Run **Semgrep** or **SonarQube** on the project page.
+3. Review findings with severity, OWASP, and (for SonarQube) issue-type filters; mark items solved; export a PDF.
 
 From the CLI:
 

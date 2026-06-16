@@ -1,0 +1,366 @@
+{% load static %}<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}SAST Platform{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/sast-design.css' %}">
+
+  <style>
+    /* Standalone-auth-only chrome: the shared stylesheet has no toggle
+       button (the SPA mounts its own), so position one here. */
+    .auth-theme-toggle {
+      position: fixed; top: 16px; right: 16px; z-index: 10;
+      font-family: var(--font-mono); font-size: var(--fs-xs);
+      letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--fg-2); padding: 6px 10px;
+      border: 1px solid var(--line); border-radius: var(--r-2);
+      background: var(--bg-1);
+    }
+    .auth-theme-toggle:hover { color: var(--fg); border-color: var(--line-strong); }
+    /* The shared stylesheet only colors .auth-row links; the
+       login/signup cross-links live in .auth-sub. */
+    .auth-sub a { color: var(--accent); text-decoration: none; }
+    .auth-sub a:hover { text-decoration: underline; }
+    @media (max-width: 860px) {
+      .auth-shell { grid-template-columns: 1fr; }
+      .auth-pane.aside { display: none; }
+    }
+
+    /* Password strength meter. Injected next to the new-password field
+       by the script below; debounced, so it reacts a beat after typing
+       stops rather than on every key. */
+    .pw-meter { margin-top: 8px; }
+    .pw-meter-track {
+      height: 4px; border-radius: 999px;
+      background: var(--line); overflow: hidden;
+    }
+    .pw-meter-fill {
+      height: 100%; width: 0;
+      transition: width 200ms ease, background-color 200ms ease;
+      background: var(--sev-high);
+    }
+    .pw-meter-label {
+      margin-top: 6px;
+      font-family: var(--font-mono); font-size: var(--fs-xs);
+      letter-spacing: 0.04em; color: var(--fg-3); min-height: 1em;
+    }
+    .pw-meter[data-score="0"] .pw-meter-fill { width: 12%;  background: var(--sev-high); }
+    .pw-meter[data-score="1"] .pw-meter-fill { width: 33%;  background: var(--sev-high); }
+    .pw-meter[data-score="2"] .pw-meter-fill { width: 58%;  background: var(--sev-med); }
+    .pw-meter[data-score="3"] .pw-meter-fill { width: 80%;  background: var(--accent); }
+    .pw-meter[data-score="4"] .pw-meter-fill { width: 100%; background: var(--ok); }
+
+    /* Live requirements checklist. Replaces Django's static help list
+       with the same rules, lit green/red by the server's validators. */
+    .pw-reqs {
+      list-style: none; margin: 10px 0 0; padding: 0;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .pw-reqs li {
+      font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5;
+      color: var(--fg-3); display: flex; gap: 7px; align-items: baseline;
+    }
+    .pw-reqs li[data-state="ok"] { color: var(--fg-2); }
+    .pw-req-mark { font-weight: 600; }
+    .pw-reqs li[data-state="pending"] .pw-req-mark { color: var(--fg-3); }
+    .pw-reqs li[data-state="ok"] .pw-req-mark { color: var(--ok); }
+    .pw-reqs li[data-state="fail"] .pw-req-mark { color: var(--sev-high); }
+
+    /* Live "do the two password fields match" line under the confirm box. */
+    .pw-match {
+      margin-top: 6px; font-family: var(--font-mono); font-size: var(--fs-xs);
+      letter-spacing: 0.04em; min-height: 1em; color: var(--fg-3);
+    }
+    .pw-match[data-ok="true"] { color: var(--ok); }
+    .pw-match[data-ok="false"] { color: var(--sev-high); }
+
+    /* Nudge shown only if someone fights the bar for a while: tells them
+       what's still between a passing password and a strong one. */
+    .pw-hint {
+      display: none; margin-top: 8px;
+      font-family: var(--font-mono); font-size: var(--fs-xs);
+      letter-spacing: 0.03em; color: var(--accent);
+    }
+  </style>
+
+  <script>
+    // Apply the saved theme before first paint to avoid a flash. Shares
+    // the SPA's localStorage key so a user's choice carries across.
+    try {
+      var t = localStorage.getItem('sast_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* localStorage may be disabled */ }
+  </script>
+</head>
+<body>
+  <button type="button" class="auth-theme-toggle" id="auth-theme-toggle" aria-label="Toggle theme">theme</button>
+
+  <div class="auth-shell">
+    <div class="auth-pane aside">
+      <div class="auth-aside-art">
+        <div class="auth-aside-card">
+          <div class="term-line"><span class="prompt">$</span> sast init --workspace acme</div>
+          <div class="term-line">&rarr; allocating namespace</div>
+          <div class="term-line">&rarr; provisioning scan workers <span class="ok">[OK]</span></div>
+          <div class="term-line">&rarr; loading default rulesets <span class="ok">[OK]</span></div>
+          <div class="term-line">&rarr; wiring integrations &middot; semgrep, sonarqube</div>
+          <div class="term-line"><span class="prompt">$</span> sast project add core-auth-service</div>
+          <div class="term-line">&rarr; cloning repo</div>
+          <div class="term-line">&rarr; language detection &middot; Go, gRPC</div>
+          <div class="term-line"><span class="prompt">$</span> sast scan run --tool=semgrep</div>
+          <div class="term-line"><span style="color: var(--accent)">&#9656;</span> 14,204 files &middot; 1.2M LOC &middot; 00:00:45</div>
+          <div class="term-line"><span class="high">2 high</span> &middot; <span class="warn">5 medium</span> &middot; 3 low</div>
+          <div class="term-line" style="color: var(--fg-3); margin-top: 8px">// register to begin &rarr;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-pane">
+      <form class="auth-form" method="post" novalidate>
+        {% csrf_token %}
+        <div class="auth-brand">
+          <span class="brand-logo">SAST</span>
+          <span class="brand-sub">platform</span>
+        </div>
+
+        {% block authform %}{% endblock %}
+
+        <div class="auth-row">
+          <span class="mono">// secured by sast_core</span>
+          <span class="mono" style="color: var(--fg-3)">v1.0</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('auth-theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+        var next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('sast_theme', next); } catch (e) {}
+      });
+    })();
+  </script>
+
+  <script>
+    // Password UX for the field being set (signup #id_password1,
+    // change-password #id_new_password1; login has neither, so this
+    // no-ops there): a fast strength bar, a live requirements checklist
+    // the server's real validators light up, a match line for the
+    // confirm field, and a nudge toward a strong password.
+    (function () {
+      var pw = document.querySelector('#id_password1, #id_new_password1');
+      if (!pw) return;
+      var form = pw.form;
+      var control = pw.closest('.form-control');
+      var box = pw.closest('.input') || pw;
+      var confirm = document.querySelector('#id_password2, #id_new_password2');
+
+      // Django prints the same rules as static help text; the live
+      // checklist stands in for it, so hide the static copy.
+      var staticHint = control ? control.querySelector('.form-hint') : null;
+      if (staticHint) staticHint.style.display = 'none';
+
+      var meter = document.createElement('div');
+      meter.className = 'pw-meter';
+      var track = document.createElement('div');
+      track.className = 'pw-meter-track';
+      track.setAttribute('aria-hidden', 'true');
+      var fill = document.createElement('div');
+      fill.className = 'pw-meter-fill';
+      track.appendChild(fill);
+      var strengthLabel = document.createElement('div');
+      strengthLabel.className = 'pw-meter-label';
+      strengthLabel.setAttribute('aria-live', 'polite');
+      meter.appendChild(track);
+      meter.appendChild(strengthLabel);
+
+      var reqs = document.createElement('ul');
+      reqs.className = 'pw-reqs';
+      var hint = document.createElement('div');
+      hint.className = 'pw-hint';
+
+      box.insertAdjacentElement('afterend', meter);
+      meter.insertAdjacentElement('afterend', reqs);
+      reqs.insertAdjacentElement('afterend', hint);
+
+      var match = null;
+      if (confirm) {
+        match = document.createElement('div');
+        match.className = 'pw-match';
+        match.setAttribute('aria-live', 'polite');
+        (confirm.closest('.input') || confirm).insertAdjacentElement('afterend', match);
+      }
+
+      var submitError = null;
+      var submitBtn = form ? form.querySelector('button[type=submit]') : null;
+      if (submitBtn) {
+        submitError = document.createElement('div');
+        submitError.className = 'form-error';
+        submitError.style.display = 'none';
+        submitBtn.insertAdjacentElement('beforebegin', submitError);
+      }
+
+      function strength(p) {
+        if (!p) return { s: '', t: '' };
+        if (p.length < 8) return { s: '0', t: 'too short (min 8)' };
+        var classes = 0;
+        if (/[a-z]/.test(p)) classes++;
+        if (/[A-Z]/.test(p)) classes++;
+        if (/[0-9]/.test(p)) classes++;
+        if (/[^A-Za-z0-9]/.test(p)) classes++;
+        var s = 1;
+        if (p.length >= 10 && classes >= 2) s = 2;
+        if (p.length >= 12 && classes >= 3) s = 3;
+        if (p.length >= 14 && classes >= 4) s = 4;
+        return { s: String(s), t: ['', 'weak', 'fair', 'good', 'strong'][s] };
+      }
+
+      function missingForStrong(p) {
+        var need = [];
+        if (p.length < 14) need.push((14 - p.length) + ' more chars');
+        if (!/[a-z]/.test(p)) need.push('a lowercase letter');
+        if (!/[A-Z]/.test(p)) need.push('an uppercase letter');
+        if (!/[0-9]/.test(p)) need.push('a digit');
+        if (!/[^A-Za-z0-9]/.test(p)) need.push('a symbol');
+        return need;
+      }
+
+      function renderStrength() {
+        var r = strength(pw.value);
+        meter.setAttribute('data-score', r.s);
+        strengthLabel.textContent = r.t;
+        nudge();
+      }
+
+      function nudge() {
+        var sc = strength(pw.value).s;
+        if (sc === '4' || sc === '') { hint.style.display = 'none'; return; }
+        if (edits >= 24 && lastAllOk === true) {
+          var need = missingForStrong(pw.value);
+          if (need.length) {
+            hint.textContent = 'psst: ' + need.join(', ') + ' would make it strong';
+            hint.style.display = 'block';
+          }
+        }
+      }
+
+      function renderMatch() {
+        if (!match) return;
+        if (!confirm.value) { match.textContent = ''; match.removeAttribute('data-ok'); return; }
+        var ok = confirm.value === pw.value;
+        match.setAttribute('data-ok', ok ? 'true' : 'false');
+        match.textContent = ok ? 'passwords match' : "passwords don't match";
+      }
+
+      function valueOf(id) {
+        var el = document.getElementById('id_' + id);
+        return el ? el.value : '';
+      }
+
+      function csrf() {
+        var el = form ? form.querySelector('[name=csrfmiddlewaretoken]') : null;
+        return el ? el.value : '';
+      }
+
+      var lastAllOk = null;
+      var reqSeq = 0;
+      var ruleLabels = [];
+
+      // states === null paints neutral dots (the guide, and the
+      // mid-typing state); an array of bools sets each row to ✓ or ✗.
+      function paintReqs(states) {
+        reqs.innerHTML = '';
+        ruleLabels.forEach(function (label, i) {
+          var state = states ? (states[i] ? 'ok' : 'fail') : 'pending';
+          var li = document.createElement('li');
+          li.setAttribute('data-state', state);
+          var mark = document.createElement('span');
+          mark.className = 'pw-req-mark';
+          mark.textContent = state === 'ok' ? '✓' : state === 'fail' ? '✗' : '•';
+          li.appendChild(mark);
+          li.appendChild(document.createTextNode(' ' + label));
+          reqs.appendChild(li);
+        });
+      }
+
+      function checkReqs() {
+        var seq = ++reqSeq;
+        fetch('/accounts/password/requirements/', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrf() },
+          body: new URLSearchParams({
+            password: pw.value,
+            username: valueOf('username'),
+            email: valueOf('email'),
+          }),
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (seq !== reqSeq) return;
+          ruleLabels = data.rules.map(function (r) { return r.label; });
+          lastAllOk = data.all_ok;
+          paintReqs(pw.value ? data.rules.map(function (r) { return r.ok; }) : null);
+          nudge();
+        }).catch(function () { /* offline: the server still validates on submit */ });
+      }
+
+      // Prime the labels so the checklist shows as a neutral dotted guide
+      // before a single key is pressed.
+      fetch('/accounts/password/requirements/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf() },
+        body: new URLSearchParams({ password: '' }),
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        ruleLabels = data.rules.map(function (r) { return r.label; });
+        if (!reqs.children.length) paintReqs(null);
+      }).catch(function () {});
+
+      var edits = 0;
+      var strengthTimer, reqsTimer;
+      pw.addEventListener('input', function () {
+        edits++;
+        renderMatch();
+        clearTimeout(strengthTimer);
+        strengthTimer = setTimeout(renderStrength, 200);
+        // Show dots now, resolve to ✓/✗ once typing settles.
+        lastAllOk = null;
+        if (ruleLabels.length) paintReqs(null);
+        clearTimeout(reqsTimer);
+        if (pw.value) reqsTimer = setTimeout(checkReqs, 800);
+      });
+      if (confirm) confirm.addEventListener('input', renderMatch);
+
+      // Stop a submit we already know will bounce so the typed values
+      // survive, and say plainly which part is wrong (the empty-confirm
+      // case used to fail silently).
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          var msg = '';
+          if (confirm && !confirm.value) msg = 'Please confirm your password.';
+          else if (confirm && confirm.value !== pw.value) msg = "Passwords don't match.";
+          else if (lastAllOk === false) msg = "Your password doesn't meet the requirements above.";
+          // Still mid-debounce: don't let an unvalidated password hit the
+          // server (the reject reload wipes the field). Force the check now.
+          else if (pw.value && lastAllOk === null) msg = 'Checking your password, give it a second.';
+          if (!msg) { if (submitError) submitError.style.display = 'none'; return; }
+          e.preventDefault();
+          if (submitError) {
+            submitError.textContent = msg;
+            submitError.style.display = 'block';
+          }
+          if (pw.value && lastAllOk !== true) checkReqs();
+          (confirm && confirm.value !== pw.value ? confirm : pw).focus();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

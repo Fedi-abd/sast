@@ -1,4 +1,4 @@
-"""SonarQube adapter — runs the full scan from inside the platform.
+"""SonarQube adapter: runs the full scan from inside the platform.
 
 Flow on each invocation:
   1. Validate config (token, host, project key, scanner path).
@@ -7,7 +7,7 @@ Flow on each invocation:
   3. Poll `GET /api/ce/component?component=<key>` until the server's
      compute task transitions to SUCCESS / FAILED / CANCELED.
   4. Fetch the issues via `GET /api/issues/search?componentKeys=<key>`.
-  5. Hand the issues JSON back to the caller — the parser converts it
+  5. Hand the issues JSON back to the caller; the parser converts it
      into the platform's normalized finding shape.
 
 Same `ToolRunResult` interface as `SemgrepAdapter`, so `ScanService`
@@ -63,7 +63,7 @@ class SonarAdapter(ToolAdapter):
             return self._fail("Sonar project_key required")
         if not token:
             return self._fail(
-                "Sonar not configured — set SONAR_TOKEN in .env"
+                "Sonar not configured. Set SONAR_TOKEN in .env."
             )
 
         run_err = self._run_scanner(repo_path, project_key, token)
@@ -85,7 +85,7 @@ class SonarAdapter(ToolAdapter):
             f"-Dsonar.projectKey={project_key}",
             # `projectBaseDir` is what the scanner uses as its anchor for
             # everything else; without it the scanner treats its CWD as
-            # the base, which is the runserver's directory — completely
+            # the base, which is the runserver's directory, completely
             # the wrong place. With it set, `sonar.sources=.` (relative)
             # then finds the actual source files.
             f"-Dsonar.projectBaseDir={repo_path}",
@@ -98,13 +98,13 @@ class SonarAdapter(ToolAdapter):
             # Java analysis normally requires compiled .class files;
             # without this property Sonar refuses to scan a project that
             # has any .java sources. Pointing binaries at the source
-            # dir is the standard "we don't compile" workaround — it
+            # dir is the standard "we don't compile" workaround; it
             # disables the bytecode-dependent rules but lets the Java
             # source-level rules run anyway.
             "-Dsonar.java.binaries=.",
         ]
         # Pre-check: subprocess.run raises FileNotFoundError for both
-        # "executable missing" AND "cwd doesn't exist" — same exception,
+        # "executable missing" AND "cwd doesn't exist", same exception,
         # very different fixes. Catch the cwd case explicitly so the
         # error message points at the right thing.
         if not os.path.isdir(repo_path):
@@ -147,7 +147,7 @@ class SonarAdapter(ToolAdapter):
                 f"returncode={result.returncode} full_output={combined!r}"
             )
 
-            # Find the actual diagnostic — Sonar prints `[ERROR]` lines
+            # Find the actual diagnostic; Sonar prints `[ERROR]` lines
             # for the real cause, and a Java stack trace far below it.
             # Show 3 lines before + the [ERROR] line + 10 after, so the
             # cause is visible without 50 lines of stack frames.
@@ -158,7 +158,7 @@ class SonarAdapter(ToolAdapter):
             if error_idx is not None:
                 snippet = lines[max(0, error_idx - 3): error_idx + 11]
             else:
-                # Fallback — last 50 lines is much better than 20 for
+                # Fallback: last 50 lines is much better than 20 for
                 # capturing exception text above stack frames.
                 snippet = lines[-50:]
             return self._fail(
@@ -168,7 +168,7 @@ class SonarAdapter(ToolAdapter):
 
         # Surface the scanner summary in the runserver log so a "0
         # findings in 7s" failure mode is debuggable from the console
-        # without rerunning. Just the last few lines — the full stdout
+        # without rerunning. Just the last few lines; the full stdout
         # is huge.
         tail = "\n".join((result.stdout or "").strip().splitlines()[-15:])
         logger.info(f"sonar_scanner_summary key={project_key} tail={tail!r}")
@@ -215,7 +215,7 @@ class SonarAdapter(ToolAdapter):
         )
 
     def _fetch_issues(self, project_key, token):
-        """Pull every finding Sonar has for this project — both regular
+        """Pull every finding Sonar has for this project, both regular
         issues (`/api/issues/search`) and security hotspots
         (`/api/hotspots/search`). Hotspots got promoted to a separate
         API in modern SonarQube; for a security-focused platform we
@@ -227,7 +227,7 @@ class SonarAdapter(ToolAdapter):
         # SAST_SONAR_ISSUE_TYPES) -----------------------------------
         all_issues = []
         page_size = 500
-        max_pages = 20  # 20 * 500 = 10,000 — Sonar's hard ceiling.
+        max_pages = 20  # 20 * 500 = 10,000, Sonar's hard ceiling.
         for page in range(1, max_pages + 1):
             params = {
                 "componentKeys": project_key,
@@ -261,7 +261,7 @@ class SonarAdapter(ToolAdapter):
             if len(all_issues) >= total or len(issues) < page_size:
                 break
         else:
-            # Loop completed without break — we hit max_pages.
+            # Loop completed without break; we hit max_pages.
             logger.warning(
                 f"sonar_issues_truncated key={project_key} "
                 f"fetched={len(all_issues)} total={data.get('total')}"

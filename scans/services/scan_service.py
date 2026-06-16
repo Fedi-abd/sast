@@ -7,6 +7,7 @@ from scans.tools.sonar_adapter import SonarAdapter
 from scans.tools.sonar_parser import SonarParser
 from scans.services.mapping_service import MappingService
 from scans.services.path_resolver import PathResolver
+from users.models import UserProfile
 
 import logging
 logger = logging.getLogger("scans")
@@ -48,7 +49,7 @@ class ScanService:
     def execute(self, scan: Scan, config: Optional[Dict] = None) -> Dict[str, Any]:
         """Run the adapter/parser/mapping pipeline on an existing scan row.
 
-        Must be called OUTSIDE any caller-held transaction — a DB error
+        Must be called OUTSIDE any caller-held transaction; a DB error
         during `bulk_create` would otherwise poison the transaction and
         prevent the FAILED-status save below from going through.
         """
@@ -79,6 +80,7 @@ class ScanService:
                 scan.finished_at = timezone.now()
                 scan.duration_seconds = int((timezone.now() - start_time).total_seconds())
                 scan.save()
+                UserProfile.refund(project.owner)
 
                 # logging: adapter failure
                 logger.error(f"scan_error id={scan.id} error='{adapter_result.error_message}'")
@@ -129,13 +131,14 @@ class ScanService:
         except (ValueError, RuntimeError) as e:
             # Expected, human-readable validation failures: zip-slip
             # rejected, git host not allowed, missing source, git clone
-            # failed. Show the message as-is — no "Unexpected error:"
+            # failed. Show the message as-is, no "Unexpected error:"
             # prefix, since we raised this on purpose.
             scan.status = 'FAILED'
             scan.error_message = str(e)
             scan.finished_at = timezone.now()
             scan.duration_seconds = int((timezone.now() - start_time).total_seconds())
             scan.save()
+            UserProfile.refund(project.owner)
 
             logger.info(f"scan_error id={scan.id} error='{str(e)}'")
             logger.info(
@@ -152,6 +155,7 @@ class ScanService:
             scan.finished_at = timezone.now()
             scan.duration_seconds = int((timezone.now() - start_time).total_seconds())
             scan.save()
+            UserProfile.refund(project.owner)
 
             # logging: unexpected exception
             logger.error(f"scan_error id={scan.id} error='{str(e)}'")

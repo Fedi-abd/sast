@@ -86,7 +86,7 @@ class SonarAdapterTests(SimpleTestCase):
 
         # Three HTTP calls: status poll, issues fetch, hotspots fetch.
         # (Hotspots endpoint isn't mocked, so the call raises StopIteration
-        # internally and the adapter swallows it — counted but harmless.)
+        # internally and the adapter swallows it, counted but harmless.)
         self.assertEqual(get_mock.call_count, 3)
         self.assertIn("/api/ce/component", get_mock.call_args_list[0].args[0])
         self.assertIn("/api/issues/search", get_mock.call_args_list[1].args[0])
@@ -103,7 +103,7 @@ class SonarAdapterTests(SimpleTestCase):
         self.assertIn("exited 1", result.error_message)
 
     def test_scanner_missing_binary_fails_clearly(self):
-        # Stub os.path.isdir so the cwd pre-check passes — we want this
+        # Stub os.path.isdir so the cwd pre-check passes; we want this
         # test to exercise the FileNotFoundError-from-subprocess path.
         with mock.patch(
             "scans.tools.sonar_adapter.os.path.isdir", return_value=True
@@ -180,7 +180,7 @@ class SonarAdapterTests(SimpleTestCase):
                 sonar_token="t",
                 sonar_scanner_path="/usr/bin/sonar-scanner",
                 poll_interval=0.001,
-                poll_timeout=0.05,  # 50ms — guaranteed to time out
+                poll_timeout=0.05,  # 50ms, guaranteed to time out
             )
             result = adapter.run("/repo", {"project_key": "k"})
         self.assertFalse(result.success)

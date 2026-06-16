@@ -5,6 +5,11 @@ from django.shortcuts import redirect
 from scans import views
 
 
+# Project-wide error handlers. Active when DEBUG=False; Django renders
+# its own diagnostic pages under DEBUG=True regardless.
+handler404 = "scans.views.handler_404"
+
+
 def root_redirect(request):
     """Send the user to the Vue SPA. The /app/ route is the primary UI.
 
@@ -31,10 +36,10 @@ urlpatterns = [
     path('accounts/', include('users.urls')),
     path('api/', include('scans.api.urls')),
     path('app/', app_placeholder),
-    path('crash/', views.crash),  # forces a 500 — kept for testing error pages
+    path('crash/', views.crash),  # forces a 500, kept for testing error pages
 ]
 
-# Templated UI — debug fallback only. Production sets
+# Templated UI, debug fallback only. Production sets
 # SAST_DEBUG_UI=False in .env to hide these. The Vue SPA at /app/
 # is the real frontend; these routes exist so an unbuilt or broken
 # SPA doesn't strand the developer.

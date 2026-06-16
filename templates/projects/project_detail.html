@@ -45,7 +45,7 @@
           {% if project.language %}
             {{ project.language }}
           {% else %}
-            <span class="text-muted" aria-label="No language set">—</span>
+            <span class="text-muted" aria-label="No language set">-</span>
           {% endif %}
         </dd>
 
@@ -122,7 +122,7 @@
                   {% if scan.duration_seconds is not None %}
                     {{ scan.duration_seconds }}s
                   {% else %}
-                    —
+                    -
                   {% endif %}
                 </td>
                 <td>{{ scan.finding_count }}</td>
@@ -171,7 +171,7 @@
 
       // …but defer disabling the buttons until *after* the browser has
       // serialized the form. Disabling synchronously drops the
-      // submitter button's name/value from the POST body — that bug
+      // submitter button's name/value from the POST body; that bug
       // had every scan defaulting to `tool=semgrep` no matter which
       // button you clicked.
       setTimeout(function () {

@@ -1,7 +1,7 @@
 """DRF read-only endpoint tests.
 
 Trust-boundary coverage: every endpoint must (1) reject unauthenticated
-requests and (2) refuse cross-user access. Shape coverage is light —
+requests and (2) refuse cross-user access. Shape coverage is light,
 just enough to catch a serializer field that disappears.
 """
 from django.contrib.auth import get_user_model
@@ -19,6 +19,44 @@ class ApiAuthTests(TestCase):
     def test_scans_list_requires_auth(self):
         response = self.client.get(reverse("scan-list"))
         self.assertIn(response.status_code, (401, 403))
+
+    def test_me_requires_auth(self):
+        response = self.client.get(reverse("me"))
+        self.assertIn(response.status_code, (401, 403))
+
+
+class MeEndpointTests(TestCase):
+    def test_me_returns_current_user_identity(self):
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="carol", password="p", email="c@example.com",
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("me"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["username"], "carol")
+        self.assertEqual(body["email"], "c@example.com")
+        self.assertFalse(body["is_staff"])
+
+    def test_me_marks_staff_users(self):
+        User = get_user_model()
+        admin = User.objects.create_user(username="admin", password="p", is_staff=True)
+        self.client.force_login(admin)
+        response = self.client.get(reverse("me"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["is_staff"])
+
+    def test_me_does_not_leak_password_or_other_users(self):
+        User = get_user_model()
+        alice = User.objects.create_user(username="alice", password="p")
+        User.objects.create_user(username="bob", password="p")
+        self.client.force_login(alice)
+        body = self.client.get(reverse("me")).json()
+        # No password fields ever in the response, and only Alice
+        # appears. Not a list of all users.
+        self.assertNotIn("password", body)
+        self.assertEqual(body["username"], "alice")
 
 
 class ApiScopeTests(TestCase):

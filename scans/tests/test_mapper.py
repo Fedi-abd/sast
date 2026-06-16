@@ -1,4 +1,4 @@
-"""Tests for CWEMapper — the heart of the security reasoning layer.
+"""Tests for CWEMapper, the heart of the security reasoning layer.
 
 These lock in two things:
   1. CWE input normalization handles the noisy formats real tools emit.

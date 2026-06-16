@@ -1,0 +1,23 @@
+# systemd unit — Django app server (gunicorn).
+# Install: sudo cp deploy/gunicorn-sast.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now gunicorn-sast
+[Unit]
+Description=SAST Platform — gunicorn (Django)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=peli
+Group=peli
+WorkingDirectory=/mnt/c/Users/Peli911GT/Desktop/sast
+# settings.py loads .env itself (python-dotenv), so no EnvironmentFile.
+ExecStart=/mnt/c/Users/Peli911GT/Desktop/sast/linux-venv/bin/gunicorn \
+    config.wsgi:application \
+    --bind 127.0.0.1:8001 \
+    --workers 3 \
+    --timeout 120
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

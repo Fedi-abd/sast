@@ -26,11 +26,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    # Fail fast at import with a clear message rather than letting a
+    # None SECRET_KEY surface as a cryptic ImproperlyConfigured deep in
+    # a request. Most common cause: cloned the repo without copying
+    # .env.example to .env.
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "SECRET_KEY is not set. Copy .env.example to .env and set "
+        "SECRET_KEY before running the project."
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = ['*']
+# Default '*' keeps local dev frictionless; production sets a real
+# comma-separated host list via .env (e.g. ALLOWED_HOSTS=sast.example.com).
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition
@@ -46,10 +58,10 @@ INSTALLED_APPS = [
     'django_q',
     'core',
     'scans',
-    'users',
+    'users.apps.UsersConfig',
 ]
 
-# django-q2: ORM broker keeps everything in Postgres — no Redis to
+# django-q2: ORM broker keeps everything in Postgres, no Redis to
 # operate. `retry` must be larger than `timeout` or django-q2 refuses
 # to start. Override Q_CLUSTER["sync"] = True in tests to run tasks
 # inline in the same process.
@@ -165,6 +177,11 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Project-level static sources: served directly by runserver in dev,
+# collected into STATIC_ROOT for production. Houses the design-system
+# stylesheet the standalone auth pages share with the Vue SPA.
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
 # Uploaded source archives land here.
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -182,6 +199,13 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = SAST_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 SAST_GIT_CLONE_TIMEOUT = int(os.getenv("SAST_GIT_CLONE_TIMEOUT", "60"))
 
 # Auth
+# EmailOrUsernameBackend extends AllowAllUsersModelBackend: inactive
+# accounts still *authenticate* so the login form can say "account
+# disabled" instead of "wrong credentials" (the form's
+# confirm_login_allowed rejects them pre-session, and DRF's
+# SessionAuthentication checks is_active on every API call), and the
+# login identifier may be the username OR an unambiguous email.
+AUTHENTICATION_BACKENDS = ["users.backends.EmailOrUsernameBackend"]
 LOGIN_URL = "/accounts/login/"
 # After login, land on the Vue SPA. Until Vue is built, /app/
 # is a placeholder view that redirects to /debug/projects/, so
@@ -190,14 +214,33 @@ LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Templated UI exposure. The Django templates that pre-date the Vue
-# SPA still work, but they're treated as a debug-only fallback —
+# SPA still work, but they're treated as a debug-only fallback,
 # accessible in dev/tests, hidden in production. Production .env
 # should set `SAST_DEBUG_UI=False`. We can't gate this on Django's
 # DEBUG flag directly because the test runner forces DEBUG=False
 # and would hide the URLs templates use during reverse() calls.
 SAST_DEBUG_UI = os.getenv("SAST_DEBUG_UI", "True") == "True"
 
-# SonarQube profile defaults — read from env so they can be set per
+# Production hardening. Django 4+ checks the Origin header on writes,
+# so a deployment served through nginx needs its public origins listed
+# (scheme included, e.g. "http://192.168.1.20").
+CSRF_TRUSTED_ORIGINS = [
+    origin for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin
+]
+
+# TLS-dependent flags sit behind their own switch rather than DEBUG:
+# the PFE demo may run plain HTTP on a LAN, where SECURE_SSL_REDIRECT
+# would redirect the site into a void. Flip SAST_TLS=True only once
+# nginx actually terminates HTTPS.
+if os.getenv("SAST_TLS", "False") == "True":
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # Short on purpose; bump once the cert setup is proven.
+    SECURE_HSTS_SECONDS = 3600
+
+# SonarQube profile defaults, read from env so they can be set per
 # deployment without code changes. A per-project override moves into
 # the Project model in Sprint 3.
 SONAR_HOST = os.getenv("SONAR_HOST", "http://localhost:9000")

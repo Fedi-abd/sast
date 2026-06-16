@@ -1,37 +1,54 @@
-{% extends "base.html" %}
+{% extends "registration/auth_base.html" %}
 
-{% block content %}
-<div class="container mt-5" style="max-width: 420px;">
-  <h2 class="mb-4">Log in</h2>
+{% block title %}Log in &middot; SAST Platform{% endblock %}
 
-  <form method="post" novalidate>
-    {% csrf_token %}
+{% block authform %}
+  <div>
+    <h1 class="auth-h rise-in">Log in</h1>
+    <p class="auth-sub">
+      New here?
+      <a href="{% url 'signup' %}">Create an account</a>
+    </p>
+  </div>
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-danger">
-        {% for err in form.non_field_errors %}{{ err }}{% endfor %}
+  {% if request.GET.reason == "session" %}
+    <div class="form-hint" style="color: var(--sev-med)">
+      You were signed out. If this is unexpected (for example, your
+      account was changed), contact your administrator.
+    </div>
+  {% endif %}
+
+  {% if form.non_field_errors %}
+    <div class="form-error">
+      {% for err in form.non_field_errors %}{{ err }}{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="auth-stack">
+    <div class="form-control">
+      <div class="form-label">{{ form.username.label }}</div>
+      <div class="input {% if form.username.errors %}error{% endif %}">
+        {{ form.username }}
       </div>
-    {% endif %}
+      {% for err in form.username.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+    </div>
 
-    {% for field in form %}
-      <div class="mb-3">
-        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}
-          <div class="form-text">{{ field.help_text|safe }}</div>
-        {% endif %}
-        {% for err in field.errors %}
-          <div class="text-danger small">{{ err }}</div>
-        {% endfor %}
+    <div class="form-control">
+      <div class="form-label">{{ form.password.label }}</div>
+      <div class="input {% if form.password.errors %}error{% endif %}">
+        {{ form.password }}
       </div>
-    {% endfor %}
+      {% for err in form.password.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+    </div>
+  </div>
 
-    <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit" class="btn btn-primary w-100">Log in</button>
-  </form>
+  <input type="hidden" name="next" value="{{ next }}">
 
-  <p class="mt-3 text-center text-muted">
-    No account yet? <a href="{% url 'signup' %}">Sign up</a>.
+  <button class="btn btn-primary" type="submit" style="justify-content: center; padding: 12px 14px">
+    Log in
+  </button>
+
+  <p class="auth-sub" style="margin-top: 12px">
+    <a href="{% url 'password-forgot' %}">Forgot your password?</a>
   </p>
-</div>
 {% endblock %}

@@ -1,4 +1,4 @@
-"""Tests for SonarParser — covers the cases the bundled Sprint-1 tests miss."""
+"""Tests for SonarParser: covers the cases the bundled Sprint-1 tests miss."""
 import json
 from django.test import SimpleTestCase
 from scans.tools.sonar_parser import SonarParser

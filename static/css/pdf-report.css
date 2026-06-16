@@ -1,0 +1,312 @@
+/*
+ * PDF report stylesheet, print-only, fed to WeasyPrint as a single
+ * stylesheet alongside the rendered template.
+ *
+ * Theming: every color used in the report resolves through the
+ * variables in :root below. When the SPA's design tokens land, paste
+ * the matching hex/oklch values into this block and the report
+ * reskins without touching markup. Severity colors follow the
+ * non-negotiable contract: HIGH=red, MEDIUM=amber, LOW=blue.
+ */
+
+:root {
+  /* core palette; swap these to match the SPA design when the
+     designer's tokens are integrated */
+  --pdf-bg:       #ffffff;
+  --pdf-ink:      #1f2937;
+  --pdf-ink-dim:  #6b7280;
+  --pdf-rule:     #e5e7eb;
+  --pdf-rule-soft:#f3f4f6;
+  --pdf-accent:   #1d4ed8;
+  --pdf-mono-bg:  #f3f4f6;
+
+  --pdf-sev-high: #b91c1c;
+  --pdf-sev-med:  #b45309;
+  --pdf-sev-low:  #1d4ed8;
+
+  --pdf-font:      "Helvetica", "Arial", sans-serif;
+  --pdf-font-mono: "Courier New", "Consolas", monospace;
+}
+
+/* page setup: A4, with running header/footer slots WeasyPrint fills */
+@page {
+  size: A4;
+  margin: 18mm 14mm 22mm 14mm;
+
+  @top-center {
+    content: element(report-header);
+  }
+  @bottom-left {
+    content: "SAST Platform · " string(project-name);
+    font-family: var(--pdf-font);
+    font-size: 8pt;
+    color: var(--pdf-ink-dim);
+  }
+  @bottom-right {
+    content: "Page " counter(page) " / " counter(pages);
+    font-family: var(--pdf-font-mono);
+    font-size: 8pt;
+    color: var(--pdf-ink-dim);
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--pdf-bg);
+  color: var(--pdf-ink);
+  font-family: var(--pdf-font);
+  font-size: 9.5pt;
+  line-height: 1.45;
+}
+
+h1, h2, h3 {
+  color: var(--pdf-ink);
+  margin: 0 0 4mm;
+  font-weight: 600;
+}
+h1 { font-size: 18pt; }
+h2 { font-size: 12pt; margin-top: 6mm; }
+h3 { font-size: 10pt; margin-top: 4mm; }
+
+p { margin: 0 0 2mm; }
+
+.muted { color: var(--pdf-ink-dim); }
+.mono  { font-family: var(--pdf-font-mono); font-size: 8.5pt; }
+
+/* running header, repeats at the top of every page */
+.report-header {
+  position: running(report-header);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 0.4pt solid var(--pdf-rule);
+  padding-bottom: 2mm;
+  font-size: 8pt;
+  color: var(--pdf-ink-dim);
+}
+.report-header .brand {
+  font-weight: 600;
+  color: var(--pdf-accent);
+  font-size: 9pt;
+}
+
+/* opening section (its own cover page) */
+.cover {
+  break-after: page;
+  border-bottom: 0.4pt solid var(--pdf-rule);
+  padding-bottom: 5mm;
+  margin-bottom: 6mm;
+}
+.cover .cover-risk {
+  margin-top: 4mm;
+  font-size: 9.5pt;
+}
+.cover .cover-risk .r-high { color: var(--pdf-sev-high); font-weight: 600; }
+.cover .cover-risk .r-med  { color: var(--pdf-sev-med);  font-weight: 600; }
+.cover .cover-risk .r-low  { color: var(--pdf-sev-low);  font-weight: 600; }
+.cover .cover-scope {
+  margin-top: 2mm;
+  font-size: 8.5pt;
+  color: var(--pdf-ink-dim);
+}
+.cover .timestamp {
+  font-family: var(--pdf-font-mono);
+  font-size: 9pt;
+  color: var(--pdf-ink-dim);
+}
+.cover .project-name {
+  string-set: project-name content();
+  font-size: 14pt;
+  font-weight: 600;
+  margin: 1mm 0;
+}
+.cover .meta-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 6mm;
+  row-gap: 1.4mm;
+  margin-top: 4mm;
+  font-size: 9pt;
+}
+.cover .meta-grid dt {
+  color: var(--pdf-ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 7.5pt;
+  font-family: var(--pdf-font-mono);
+  align-self: center;
+}
+.cover .meta-grid dd {
+  margin: 0;
+}
+
+.summary-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3mm;
+  margin: 4mm 0 8mm;
+}
+.summary-tile {
+  border: 0.4pt solid var(--pdf-rule);
+  border-radius: 1.5mm;
+  padding: 3mm;
+}
+.summary-tile .label {
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--pdf-ink-dim);
+  font-family: var(--pdf-font-mono);
+}
+.summary-tile .value {
+  font-size: 16pt;
+  font-weight: 600;
+  margin-top: 1mm;
+}
+.summary-tile.sev-high .value { color: var(--pdf-sev-high); }
+.summary-tile.sev-med  .value { color: var(--pdf-sev-med); }
+.summary-tile.sev-low  .value { color: var(--pdf-sev-low); }
+
+/* OWASP distribution: label, proportional bar, count */
+.owasp-block { margin: 2mm 0 6mm; }
+.owasp-dist {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6mm;
+  margin-top: 2mm;
+}
+.owasp-row {
+  display: grid;
+  grid-template-columns: 52mm 1fr 9mm;
+  align-items: center;
+  column-gap: 3mm;
+}
+.owasp-cat {
+  font-family: var(--pdf-font-mono);
+  font-size: 8pt;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.owasp-cat.unmapped { color: var(--pdf-ink-dim); }
+.owasp-bar {
+  height: 3mm;
+  background: var(--pdf-rule-soft);
+  border-radius: 0.8mm;
+  overflow: hidden;
+}
+.owasp-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--pdf-accent);
+}
+.owasp-count {
+  text-align: right;
+  font-family: var(--pdf-font-mono);
+  font-size: 8pt;
+  color: var(--pdf-ink-dim);
+}
+.mapping-rate { margin-top: 3mm; font-size: 8.5pt; }
+
+/* appendix (its own page) */
+.appendix { break-before: page; }
+.appendix .meta-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 6mm;
+  row-gap: 1.4mm;
+  margin: 2mm 0 4mm;
+  font-size: 9pt;
+}
+.appendix .meta-grid dt {
+  color: var(--pdf-ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 7.5pt;
+  font-family: var(--pdf-font-mono);
+  align-self: center;
+}
+.appendix .meta-grid dd { margin: 0; }
+.appendix .limits {
+  margin: 2mm 0 0;
+  padding-left: 4mm;
+  font-size: 8.5pt;
+}
+.appendix .limits li { margin-bottom: 1.4mm; }
+
+/* the 6-column findings table */
+table.findings {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin-top: 2mm;
+}
+table.findings thead th {
+  background: var(--pdf-rule-soft);
+  border: 0.4pt solid var(--pdf-rule);
+  padding: 2mm 1.5mm;
+  font-size: 7.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: bottom;
+}
+table.findings tbody td {
+  border: 0.4pt solid var(--pdf-rule);
+  padding: 2mm 1.5mm;
+  font-size: 8.5pt;
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+table.findings tr {
+  break-inside: avoid;
+}
+
+/* column widths, calibrated for A4 with 14mm side margins */
+table.findings col.c-ref         { width: 16%; }
+table.findings col.c-name        { width: 14%; }
+table.findings col.c-description { width: 21%; }
+table.findings col.c-preuve      { width: 16%; }
+table.findings col.c-reference   { width: 14%; }
+table.findings col.c-recommendation { width: 19%; }
+
+.sev-pill {
+  display: inline-block;
+  font-family: var(--pdf-font-mono);
+  font-size: 7pt;
+  font-weight: 600;
+  padding: 0.4mm 1.4mm;
+  border-radius: 0.8mm;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sev-pill.high   { background: var(--pdf-sev-high); color: #fff; }
+.sev-pill.medium { background: var(--pdf-sev-med);  color: #fff; }
+.sev-pill.low    { background: var(--pdf-sev-low);  color: #fff; }
+
+.preuve { font-family: var(--pdf-font-mono); font-size: 7.5pt; }
+.preuve .path { color: var(--pdf-ink); }
+.preuve .line { color: var(--pdf-accent); }
+
+.ref-list { margin: 0; padding-left: 3mm; font-size: 7.5pt; }
+.ref-list li { margin-bottom: 0.6mm; word-break: break-all; }
+
+.empty-state {
+  padding: 8mm 4mm;
+  text-align: center;
+  border: 0.4pt dashed var(--pdf-rule);
+  border-radius: 2mm;
+  color: var(--pdf-ink-dim);
+}
+
+.closure {
+  break-before: avoid;
+  margin-top: 10mm;
+  padding-top: 4mm;
+  border-top: 0.4pt solid var(--pdf-rule);
+  font-size: 8pt;
+  color: var(--pdf-ink-dim);
+}

@@ -1,10 +1,10 @@
 import json
 import os
-from typing import Dict, Optional
+
 
 class CWEMapper:
-    """Maps CWE IDs to OWASP Top 10 2017 categories"""
-    
+    """Maps CWE IDs to OWASP Top 10 (2017) categories."""
+
     def __init__(self, mapping_file=None):
         if mapping_file is None:
             mapping_file = os.path.join(
@@ -27,37 +27,28 @@ class CWEMapper:
         """
         if not cwe_id:
             return "UNMAPPED", 0.0
-        
-        # Normalize CWE format
+
         normalized_cwe = self._normalize_cwe(cwe_id)
-        
-        # Direct mapping
         if normalized_cwe in self.mapping:
             return self.mapping[normalized_cwe], 1.0
-        
-        # No mapping found
         return "UNMAPPED", 0.0
     
     def _normalize_cwe(self, cwe_id: str) -> str:
-        """Normalize CWE ID to CWE-XXX format"""
+        """Normalize a CWE id to the canonical ``CWE-XXX`` form.
+
+        Accepts the messy shapes the parsers emit: ``CWE-79``,
+        ``CWE-79: XSS``, ``79``, or ``CWE79``.
+        """
         cwe_id = cwe_id.strip().upper()
-        
-        # Remove description after colon
+
         if ':' in cwe_id:
             cwe_id = cwe_id.split(':')[0].strip()
-        
-        # Already in correct format
         if cwe_id.startswith('CWE-'):
             return cwe_id
-        
-        # Just number - add prefix
         if cwe_id.isdigit():
             return f'CWE-{cwe_id}'
-        
-        # Has CWE but no dash
         if cwe_id.startswith('CWE'):
             number = cwe_id[3:].strip()
             if number.isdigit():
                 return f'CWE-{number}'
-        
         return cwe_id

@@ -3,7 +3,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
 
-from .models import Finding, Project, Scan, SonarSettings
+from .models import Finding, PlatformSettings, Project, Scan, SonarSettings
 
 
 @admin.register(Project)
@@ -48,7 +48,7 @@ class FindingAdmin(admin.ModelAdmin):
 
 @admin.register(SonarSettings)
 class SonarSettingsAdmin(admin.ModelAdmin):
-    """Singleton admin — there is only one Sonar settings row.
+    """Singleton admin: there is only one Sonar settings row.
 
     Disables the "Add" button once a row exists, and redirects the
     changelist to the change form for the singleton so admins land
@@ -71,7 +71,7 @@ class SonarSettingsAdmin(admin.ModelAdmin):
         return not SonarSettings.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
-        # Don't let admins delete the singleton — they should edit it.
+        # Don't let admins delete the singleton; they should edit it.
         return False
 
     def changelist_view(self, request, extra_context=None):
@@ -90,3 +90,22 @@ class SonarSettingsAdmin(admin.ModelAdmin):
         if obj.issue_types:
             return obj.issue_types
         return format_html("<em>(env default)</em>")
+
+
+@admin.register(PlatformSettings)
+class PlatformSettingsAdmin(admin.ModelAdmin):
+    """Singleton admin, same conventions as SonarSettingsAdmin."""
+
+    list_display = ["__str__", "hide_local_source"]
+
+    def has_add_permission(self, request):
+        return not PlatformSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        obj = PlatformSettings.get_solo()
+        return redirect(
+            reverse("admin:scans_platformsettings_change", args=[obj.pk])
+        )

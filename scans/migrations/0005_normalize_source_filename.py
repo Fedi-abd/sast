@@ -1,4 +1,4 @@
-"""Data migration — normalize legacy `source_filename` values.
+"""Data migration: normalize legacy `source_filename` values.
 
 Before the form fix in this PR, ProjectForm.save() was assigning the
 existing FieldFile's `name` (which holds the storage path
@@ -7,7 +7,7 @@ column was supposed to hold just the bare filename for display.
 
 This migration cleans up rows where the value still has a slash by
 splitting on the last "/" and keeping only the trailing component.
-Idempotent — safe to run more than once; rows already in the bare-name
+Idempotent; safe to run more than once. Rows already in the bare-name
 form pass through unchanged.
 """
 from django.db import migrations
@@ -24,7 +24,7 @@ def normalize_source_filenames(apps, schema_editor):
 def noop_reverse(apps, schema_editor):
     # Once normalized to the bare filename, we can't reconstruct the
     # original storage path. The reverse migration is intentionally a
-    # no-op — the original "bug-shaped" data isn't worth restoring.
+    # no-op; the original "bug-shaped" data isn't worth restoring.
     pass
 
 

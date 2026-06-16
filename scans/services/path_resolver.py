@@ -38,7 +38,7 @@ def _noop():
 
 
 def _safe_rmtree(path):
-    """Best-effort tempdir cleanup. Errors are intentionally swallowed —
+    """Best-effort tempdir cleanup. Errors are intentionally swallowed;
     if the OS can't delete a temp file we don't want to crash a scan."""
     if path and os.path.exists(path):
         shutil.rmtree(path, ignore_errors=True)
@@ -134,12 +134,20 @@ class PathResolver:
             cmd.extend(["--branch", project.git_branch])
         cmd.extend([url, clone_dir])
 
+        # Nonexistent/private repos make git prompt for credentials,
+        # which hangs headless until the timeout. Kill the prompt so
+        # those clones fail fast with a real stderr instead.
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_ASKPASS"] = "echo"
+
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             _safe_rmtree(clone_dir)
@@ -149,7 +157,7 @@ class PathResolver:
         except FileNotFoundError:
             _safe_rmtree(clone_dir)
             raise RuntimeError(
-                "git executable not found — install git in the runtime environment"
+                "git executable not found. Install git in the runtime environment."
             )
         except Exception:
             _safe_rmtree(clone_dir)

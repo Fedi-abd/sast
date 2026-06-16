@@ -4,7 +4,7 @@ A web platform that orchestrates open-source SAST tools (Semgrep,
 SonarQube), normalizes their output, and maps findings to **OWASP Top 10
 (2017)** for consistent review.
 
-The platform itself does not implement detection rules — it sits above
+The platform itself does not implement detection rules; it sits above
 the scanners as a reasoning layer, giving you a unified view of findings
 across tools.
 
@@ -74,7 +74,7 @@ Then generate a token in the SonarQube UI and set `SONAR_HOST` and
 
 Visit `http://localhost:8000/`, sign up, then:
 
-1. Create a project — pick a source type (local path, ZIP, or Git URL).
+1. Create a project: pick a source type (local path, ZIP, or Git URL).
 2. Click **Run Semgrep** or **Run SonarQube** on the project page.
 3. Review findings with severity and OWASP filters.
 

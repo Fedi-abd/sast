@@ -1,4 +1,4 @@
-"""Tests for ProjectForm — Sprint 2 source-type-aware validation."""
+"""Tests for ProjectForm: Sprint 2 source-type-aware validation."""
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase

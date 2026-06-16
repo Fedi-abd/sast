@@ -190,8 +190,20 @@ class ScanDetailView(LoginRequiredMixin, DetailView):
 
 
 def crash(request):
-    1 / 0  # This will raise a ZeroDivisionError, simulating a crash for testing purposes
-    # scans/views.py
+    # Deliberate uncaught error. Lets us confirm the styled 500 page
+    # renders under DEBUG=False. Wired in config/urls.py.
+    1 / 0
+
+
+def handler_404(request, exception):
+    """Project-wide 404 handler.
+
+    Renders the styled `templates/errors/404.html` instead of Django's
+    debug 404 page. Wired in via `handler404` in `config/urls.py`.
+    Active when `DEBUG=False`; under DEBUG=True Django shows its own
+    diagnostic page regardless.
+    """
+    return render(request, "errors/404.html", status=404)
 
 
 @login_required
@@ -203,21 +215,29 @@ def trigger_scan(request, project_id):
     For each requested tool we:
 
       1. Open a short DB transaction with `select_for_update()` on the
-         Project row — this serializes concurrent "click Run Scan twice"
+         Project row. This serializes concurrent "click Run Scan twice"
          attempts so the duplicate check below is race-free.
       2. Skip any tool that already has a RUNNING scan for this project
          (the per-(project, tool) lock).
-      3. Reserve a RUNNING `Scan` row for the survivors.
-      4. Push `scans.tasks.run_scan` onto the django-q2 queue with the
+      3. Charge the user one credit per scan we're about to create
+         (one credit per single tool, two for "both" if both are
+         free). Insufficient credits → bounce back to the project
+         detail page with an error message via Django's messages
+         framework.
+      4. Reserve a RUNNING `Scan` row for the survivors.
+      5. Push `scans.tasks.run_scan` onto the django-q2 queue with the
          new scan IDs.
 
     The view then redirects to the project detail page, which has
     a small polling script that hits `/api/scans/<id>/` every 3s and
     reloads the page once nothing's still RUNNING. The actual scan
-    work happens in the qcluster worker process — runserver returns
+    work happens in the qcluster worker process; runserver returns
     in milliseconds.
     """
+    from django.contrib import messages
     from django_q.tasks import async_task
+
+    from users.models import InsufficientCreditsError, UserProfile
 
     valid_tools = {value for value, _ in Scan.TOOL_CHOICES} | {"both"}
     tool = request.POST.get("tool", "semgrep")
@@ -229,16 +249,29 @@ def trigger_scan(request, project_id):
 
     requested_tools = ("semgrep", "sonarqube") if tool == "both" else (tool,)
 
-    with transaction.atomic():
-        Project.objects.select_for_update().get(pk=project.pk)
-        running = set(
-            project.scans.filter(status="RUNNING").values_list("tool", flat=True)
+    try:
+        with transaction.atomic():
+            Project.objects.select_for_update().get(pk=project.pk)
+            running = set(
+                project.scans.filter(status="RUNNING").values_list("tool", flat=True)
+            )
+            to_create = [t for t in requested_tools if t not in running]
+            # One credit per scan actually created. If both tools were
+            # requested but one's already running, we only charge for
+            # the one we're starting now.
+            UserProfile.charge(request.user, cost=len(to_create))
+            scans = [
+                service._create_running_scan(project, t)
+                for t in to_create
+            ]
+    except InsufficientCreditsError as err:
+        messages.error(
+            request,
+            f"Not enough credits to start this scan "
+            f"(needs {err.cost}, have {err.remaining}). "
+            f"Ask an admin to top up.",
         )
-        scans = [
-            service._create_running_scan(project, t)
-            for t in requested_tools
-            if t not in running
-        ]
+        return redirect("scans:project_detail", pk=project.pk)
 
     for scan in scans:
         async_task(
@@ -253,14 +286,14 @@ def trigger_scan(request, project_id):
 def _build_scan_config(tool, project):
     """Per-tool config dict for `ScanService.execute`.
 
-    Semgrep has no per-scan config — its adapter just needs a path,
+    Semgrep has no per-scan config; its adapter just needs a path,
     which the resolver provides. SonarQube needs host + token + the
     per-project sonar_project_key. The resolution order for the
     host/token pair is:
 
       1. `SonarSettings` singleton row (editable in `/admin/`).
       2. `settings.SONAR_*` from `.env` / environment variables.
-      3. Hardcoded fallback (host only — there is no fallback token).
+      3. Hardcoded fallback (host only; there is no fallback token).
 
     Each Project has a unique `sonar_project_key` (auto-set on first
     save) that namespaces its findings inside SonarQube, so one shared

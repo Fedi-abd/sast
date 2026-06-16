@@ -1,0 +1,215 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>SAST Report: {{ scan.project.name }} ({{ scan.id }})</title>
+  <link rel="stylesheet" href="{{ pdf_css_url }}">
+</head>
+<body>
+
+<header class="report-header">
+  <span class="brand">SAST Platform</span>
+  <span class="mono">scan {{ scan.id }}</span>
+</header>
+
+<section class="cover">
+  <p class="timestamp">
+    Rédigé le {{ generated_at|date:"d M Y, H:i" }} (UTC)
+  </p>
+  <h1 class="project-name">{{ scan.project.name }}</h1>
+  <p class="muted">Rapport d'analyse de sécurité : résultats du scan {{ scan.get_tool_display }}</p>
+
+  <dl class="meta-grid">
+    <dt>Projet</dt>
+    <dd>{{ scan.project.name }}{% if scan.project.language %} · {{ scan.project.language }}{% endif %}</dd>
+
+    <dt>Outil</dt>
+    <dd>{{ scan.get_tool_display }}</dd>
+
+    <dt>Statut</dt>
+    <dd>{{ scan.get_status_display }}</dd>
+
+    <dt>Démarré</dt>
+    <dd>{{ scan.started_at|date:"d M Y, H:i:s" }}</dd>
+
+    {% if scan.finished_at %}
+      <dt>Terminé</dt>
+      <dd>
+        {{ scan.finished_at|date:"d M Y, H:i:s" }}
+        {% if scan.duration_seconds is not None %}
+          · {{ scan.duration_seconds }}s
+        {% endif %}
+      </dd>
+    {% endif %}
+
+    <dt>Identifiant</dt>
+    <dd class="mono">{{ scan.id }}</dd>
+  </dl>
+
+  <p class="cover-risk">
+    Risque global :
+    <span class="r-high">{{ severity_counts.HIGH }} High</span> ·
+    <span class="r-med">{{ severity_counts.MEDIUM }} Medium</span> ·
+    <span class="r-low">{{ severity_counts.LOW }} Low</span>
+    Soit {{ total_findings }} remontée{{ total_findings|pluralize:"s" }} au total.
+  </p>
+
+  {% if scope_label %}
+    <p class="cover-scope mono">Périmètre du rapport : sévérité {{ scope_label }}.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Synthèse</h2>
+  <p>
+    Ce rapport présente {{ findings|length }} remontée{{ findings|length|pluralize:"s" }}
+    issue{{ findings|length|pluralize:"s" }} de l'analyse statique du projet
+    <strong>{{ scan.project.name }}</strong>. Chaque ligne du tableau ci-dessous
+    correspond à une vulnérabilité potentielle détectée par
+    {{ scan.get_tool_display }}, classée par sévérité et catégorie
+    OWASP Top 10 (2017).
+  </p>
+
+  {% if sonar_types %}
+  <p class="muted">
+    Types de remontées SonarQube inclus :
+    <span class="mono">{{ sonar_types|join:", " }}</span>.
+  </p>
+  {% endif %}
+
+  <div class="summary-tiles">
+    <div class="summary-tile">
+      <div class="label">Total</div>
+      <div class="value">{{ total_findings }}</div>
+    </div>
+    <div class="summary-tile sev-high">
+      <div class="label">High</div>
+      <div class="value">{{ severity_counts.HIGH }}</div>
+    </div>
+    <div class="summary-tile sev-med">
+      <div class="label">Medium</div>
+      <div class="value">{{ severity_counts.MEDIUM }}</div>
+    </div>
+    <div class="summary-tile sev-low">
+      <div class="label">Low</div>
+      <div class="value">{{ severity_counts.LOW }}</div>
+    </div>
+  </div>
+
+  {% if findings %}
+  <div class="owasp-block">
+    <h3>Répartition OWASP Top 10 (2017)</h3>
+    <div class="owasp-dist">
+      {% for row in owasp_distribution %}
+        <div class="owasp-row">
+          <span class="owasp-cat{% if row.category == 'UNMAPPED' %} unmapped{% endif %}">{{ row.category }}</span>
+          <span class="owasp-bar"><span style="width: {{ row.pct }}%"></span></span>
+          <span class="owasp-count">{{ row.count }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="mapping-rate muted">
+      Taux de classification : {{ mapping_rate }}%
+      ({{ mapped_count }} classée{{ mapped_count|pluralize:"s" }} sur {{ total_findings }},
+      {{ unmapped_count }} non classée{{ unmapped_count|pluralize:"s" }}).
+    </p>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Détail des vulnérabilités</h2>
+
+  {% if findings %}
+    <table class="findings">
+      <colgroup>
+        <col class="c-ref">
+        <col class="c-name">
+        <col class="c-description">
+        <col class="c-preuve">
+        <col class="c-reference">
+        <col class="c-recommendation">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Référence vuln.</th>
+          <th>Nom de vuln.</th>
+          <th>Description</th>
+          <th>Preuve</th>
+          <th>Référence</th>
+          <th>Recommandation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for finding in findings %}
+          <tr>
+            <td>
+              <span class="sev-pill {{ finding.severity|lower }}">{{ finding.severity }}</span>
+              <div class="mono" style="margin-top: 1mm;">
+                {% if finding.owasp_category %}{{ finding.owasp_category }}{% else %}UNMAPPED{% endif %}
+              </div>
+              {% if finding.cwe_id %}
+                <div class="mono muted">{{ finding.cwe_id }}</div>
+              {% endif %}
+            </td>
+            <td class="mono">{{ finding.rule_id }}</td>
+            <td>{{ finding.message }}</td>
+            <td class="preuve">
+              <div class="path">{{ finding.file_path }}</div>
+              <div class="line">:{{ finding.line_number }}</div>
+            </td>
+            <td>
+              <ul class="ref-list">
+                {% if finding.cwe_id %}
+                  <li><a href="https://cwe.mitre.org/data/definitions/{{ finding.cwe_id|cut:'CWE-' }}.html">{{ finding.cwe_id }}</a></li>
+                {% endif %}
+                {% if finding.owasp_category %}
+                  <li>{{ finding.owasp_category }}</li>
+                {% endif %}
+              </ul>
+            </td>
+            <td>{{ finding.display_recommendation }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      Aucune vulnérabilité détectée pour ce scan.
+    </div>
+  {% endif %}
+</section>
+
+<section class="appendix">
+  <h2>Annexe</h2>
+
+  <h3>Métadonnées du scan</h3>
+  <dl class="meta-grid">
+    <dt>Outil</dt><dd>{{ scan.get_tool_display }}</dd>
+    <dt>Identifiant</dt><dd class="mono">{{ scan.id }}</dd>
+    <dt>Démarré</dt><dd>{{ scan.started_at|date:"d M Y, H:i:s" }}</dd>
+    {% if scan.finished_at %}
+      <dt>Terminé</dt>
+      <dd>{{ scan.finished_at|date:"d M Y, H:i:s" }}{% if scan.duration_seconds is not None %} · {{ scan.duration_seconds }}s{% endif %}</dd>
+    {% endif %}
+    <dt>Remontées</dt>
+    <dd>{{ total_findings }} dont {{ unmapped_count }} non classée{{ unmapped_count|pluralize:"s" }} OWASP</dd>
+  </dl>
+
+  <h3>Limites de l'analyse</h3>
+  <ul class="limits">
+    <li>Analyse statique uniquement : le code n'est pas exécuté, les vulnérabilités propres à l'exécution (DAST) ne sont pas couvertes.</li>
+    <li>Des faux positifs et faux négatifs restent possibles ; chaque remontée doit être confirmée manuellement.</li>
+    <li>La classification suit l'OWASP Top 10 (2017) via le CWE ; les remontées sans CWE exploitable apparaissent « UNMAPPED ».</li>
+  </ul>
+</section>
+
+<footer class="closure">
+  Rapport généré automatiquement par la plateforme SAST.
+  Les remontées ci-dessus reflètent l'état du code au moment du scan
+  ({{ scan.started_at|date:"d M Y" }}).
+</footer>
+
+</body>
+</html>

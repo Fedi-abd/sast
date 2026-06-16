@@ -1,0 +1,54 @@
+{
+  "_comment": "SonarQube rule_id -> OWASP Top 10 (2017) mapping. Used as a fallback by MappingService when a Sonar finding has no CWE tag (which happens for many security hotspots and rules in older Sonar projects). Keys are the bare S-number — SonarRuleMapper strips the language prefix (e.g. 'java:S2076' -> 'S2076') before lookup, since the same S-number checks the same vulnerability class across languages. Confidence score for these mappings is 0.7, lower than the 1.0 of direct CWE mappings because this table is curated by hand and may miss language-specific corner cases.",
+
+  "S2076": "A1:2017-Injection",
+  "S2078": "A1:2017-Injection",
+  "S2091": "A1:2017-Injection",
+  "S3649": "A1:2017-Injection",
+  "S5167": "A1:2017-Injection",
+  "S6549": "A1:2017-Injection",
+
+  "S2068": "A2:2017-Broken Authentication",
+  "S2647": "A2:2017-Broken Authentication",
+  "S5328": "A2:2017-Broken Authentication",
+  "S5659": "A2:2017-Broken Authentication",
+  "S5876": "A2:2017-Broken Authentication",
+  "S6437": "A2:2017-Broken Authentication",
+
+  "S2070": "A3:2017-Sensitive Data Exposure",
+  "S2245": "A3:2017-Sensitive Data Exposure",
+  "S2255": "A3:2017-Sensitive Data Exposure",
+  "S2257": "A3:2017-Sensitive Data Exposure",
+  "S4423": "A3:2017-Sensitive Data Exposure",
+  "S4426": "A3:2017-Sensitive Data Exposure",
+  "S4787": "A3:2017-Sensitive Data Exposure",
+  "S4790": "A3:2017-Sensitive Data Exposure",
+  "S4830": "A3:2017-Sensitive Data Exposure",
+  "S5332": "A3:2017-Sensitive Data Exposure",
+  "S5527": "A3:2017-Sensitive Data Exposure",
+  "S5542": "A3:2017-Sensitive Data Exposure",
+  "S5547": "A3:2017-Sensitive Data Exposure",
+  "S6432": "A3:2017-Sensitive Data Exposure",
+
+  "S2755": "A4:2017-XML External Entities (XXE)",
+
+  "S2083": "A5:2017-Broken Access Control",
+  "S2658": "A5:2017-Broken Access Control",
+  "S6096": "A5:2017-Broken Access Control",
+
+  "S2092": "A6:2017-Security Misconfiguration",
+  "S4502": "A6:2017-Security Misconfiguration",
+  "S5122": "A6:2017-Security Misconfiguration",
+  "S5443": "A6:2017-Security Misconfiguration",
+  "S5689": "A6:2017-Security Misconfiguration",
+  "S5852": "A6:2017-Security Misconfiguration",
+  "S2631": "A6:2017-Security Misconfiguration",
+
+  "S5131": "A7:2017-Cross-Site Scripting (XSS)",
+  "S5247": "A7:2017-Cross-Site Scripting (XSS)",
+
+  "S4684": "A8:2017-Insecure Deserialization",
+  "S5135": "A8:2017-Insecure Deserialization",
+
+  "S5145": "A10:2017-Insufficient Logging & Monitoring"
+}

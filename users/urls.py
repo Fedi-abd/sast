@@ -11,7 +11,7 @@ from django.contrib.auth.views import LoginView
 from django.urls import include, path
 
 from .forms import BootstrapAuthenticationForm
-from .views import SignUpView
+from .views import SignUpView, password_requirements, password_reset_request
 
 urlpatterns = [
     # Override the built-in LoginView so it picks up our styled form.
@@ -21,6 +21,12 @@ urlpatterns = [
         name="login",
     ),
     path("signup/", SignUpView.as_view(), name="signup"),
+    path(
+        "password/requirements/",
+        password_requirements,
+        name="password-requirements",
+    ),
+    path("password/forgot/", password_reset_request, name="password-forgot"),
     # Password change/reset views, plus the LogoutView used by the navbar
     # button. Listed AFTER login/ so our custom one wins.
     path("", include("django.contrib.auth.urls")),

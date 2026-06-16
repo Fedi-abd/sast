@@ -5,7 +5,7 @@ in `views.trigger_scan` invokes from a worker process. The qcluster
 worker imports this module, pulls the queued task, and calls
 `run_scan(scan_id, config)` inside its own thread.
 
-Kept deliberately thin — actual scan orchestration (resolve path,
+Kept deliberately thin; actual scan orchestration (resolve path,
 run adapter, parse, map to OWASP, persist findings) lives in
 `ScanService.execute`. The task is just the queue ↔ service bridge.
 """

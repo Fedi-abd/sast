@@ -1,4 +1,4 @@
-"""Tests for PathResolver — Sprint 2 source-ingest pipeline.
+"""Tests for PathResolver: Sprint 2 source-ingest pipeline.
 
 Covers the local / upload / git branches plus the security-relevant
 edge cases: zip-slip, oversized archive, git URL whitelist, missing
@@ -125,7 +125,7 @@ class UploadResolveTests(_Base):
         )
         with self.assertRaises(zipfile.BadZipFile):
             self.resolver.resolve(project)
-        # No assertion on the temp dir path — _safe_rmtree ran on the
+        # No assertion on the temp dir path: _safe_rmtree ran on the
         # short-lived dir we never received a handle to.
 
     def test_missing_archive_raises(self):

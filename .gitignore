@@ -65,8 +65,15 @@ node_modules/
 .agents/
 skills-lock.json
 .playwright/
+.playwright-cli/
+playwright-report/
+test-results/
 
 # Project-local scratch / private working notes — never push these
 to do.txt
 docs/
 CLAUDE.md
+readonly/
+
+# Temporary backup of the pre-integration frontend scaffold — not product
+frontend-backup/

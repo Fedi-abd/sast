@@ -2,7 +2,7 @@
 
 These tests patch out `async_task` so the queue path is verified
 without actually firing the scanner. Sync-mode execution is exercised
-indirectly elsewhere — here we just want to confirm:
+indirectly elsewhere. Here we just want to confirm:
 
   - a RUNNING Scan row is reserved,
   - the task is enqueued with the right args,
@@ -57,7 +57,7 @@ class TriggerScanAsyncTests(TestCase):
             project=self.project, tool="semgrep", status="RUNNING",
         )
         self.client.post(self.url, {"tool": "semgrep"})
-        # Still just the one row — second click is a no-op.
+        # Still just the one row; second click is a no-op.
         self.assertEqual(
             Scan.objects.filter(project=self.project, tool="semgrep").count(), 1,
         )

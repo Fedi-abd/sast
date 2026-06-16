@@ -15,6 +15,8 @@ Django==6.0.3
 djangorestframework==3.17.1
 django-q2==1.10.0
 django-picklefield==3.4.0
+gunicorn==23.0.0
+weasyprint==69.0
 exceptiongroup==1.2.2
 face==26.0.0
 glom==25.12.0
@@ -52,7 +54,6 @@ Pygments==2.20.0
 PyJWT==2.12.1
 python-dotenv==1.2.2
 python-multipart==0.0.22
-python-sonarqube-api==2.0.5
 PyYAML==6.0.3
 referencing==0.37.0
 requests==2.33.0
